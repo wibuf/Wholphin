@@ -88,6 +88,9 @@ message PlaybackPreferences {
   string external_player = 24;
   bool cinema_mode = 25;
   DpadSeekMode dpad_seek_mode = 26;
+  // Comma-separated keywords to prioritize or deprioritize subtitle tracks by title
+  string subtitle_preferred_keywords = 27;
+  string subtitle_avoided_keywords = 28;
 }
 
 enum DpadSeekMode {
