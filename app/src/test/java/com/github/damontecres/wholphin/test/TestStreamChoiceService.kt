@@ -8,6 +8,7 @@ import com.github.damontecres.wholphin.data.model.TrackIndex
 import com.github.damontecres.wholphin.preferences.AppPreferences
 import com.github.damontecres.wholphin.preferences.DefaultUserConfiguration
 import com.github.damontecres.wholphin.preferences.UserPreferences
+import com.github.damontecres.wholphin.preferences.updatePlaybackPreferences
 import com.github.damontecres.wholphin.services.StreamChoiceService
 import io.mockk.every
 import io.mockk.mockk
@@ -750,6 +751,150 @@ class TestStreamChoiceServiceOnlyForcedClientOverride(
     }
 }
 
+/**
+ * Tests for the subtitle track keyword priority preferences (preferred/avoided keywords)
+ */
+@RunWith(Parameterized::class)
+class TestStreamChoiceServiceKeywords(
+    val input: TestInput,
+) {
+    @Test
+    fun test() {
+        runTest(input)
+    }
+
+    companion object {
+        @JvmStatic
+        @Parameterized.Parameters(name = "{index}: {0}")
+        fun data(): Collection<TestInput> =
+            listOf(
+                // Preferred keyword outranks the default flag in ALWAYS mode
+                TestInput(
+                    expectedIndex = 1,
+                    userSubtitleMode = SubtitlePlaybackMode.ALWAYS,
+                    subtitles =
+                        listOf(
+                            subtitle(0, "eng", default = true, title = "Signs & Songs"),
+                            subtitle(1, "eng", title = "Full Dialogue"),
+                        ),
+                    preferredKeywords = "full",
+                ),
+                // Avoided keyword demotes the default-flagged track in ALWAYS mode
+                TestInput(
+                    expectedIndex = 1,
+                    userSubtitleMode = SubtitlePlaybackMode.ALWAYS,
+                    subtitles =
+                        listOf(
+                            subtitle(0, "eng", default = true, title = "Signs & Songs"),
+                            subtitle(1, "eng", title = "Full Dialogue"),
+                        ),
+                    avoidedKeywords = "signs",
+                ),
+                // No keywords configured keeps the existing behavior (regression check)
+                TestInput(
+                    expectedIndex = 0,
+                    userSubtitleMode = SubtitlePlaybackMode.ALWAYS,
+                    subtitles =
+                        listOf(
+                            subtitle(0, "eng", default = true, title = "Signs & Songs"),
+                            subtitle(1, "eng", title = "Full Dialogue"),
+                        ),
+                ),
+                // Preferred keyword match qualifies a non-default track in DEFAULT mode
+                TestInput(
+                    expectedIndex = 1,
+                    userSubtitleMode = SubtitlePlaybackMode.DEFAULT,
+                    subtitles =
+                        listOf(
+                            subtitle(0, "eng", default = true, title = "Signs & Songs"),
+                            subtitle(1, "eng", title = "Full Dialogue"),
+                        ),
+                    preferredKeywords = "full",
+                ),
+                // DEFAULT mode without keywords still picks the default-flagged track
+                TestInput(
+                    expectedIndex = 0,
+                    userSubtitleMode = SubtitlePlaybackMode.DEFAULT,
+                    subtitles =
+                        listOf(
+                            subtitle(0, "eng", default = true, title = "Signs & Songs"),
+                            subtitle(1, "eng", title = "Full Dialogue"),
+                        ),
+                ),
+                // Keywords apply in SMART mode when audio differs from preferred language
+                TestInput(
+                    expectedIndex = 1,
+                    userSubtitleMode = SubtitlePlaybackMode.SMART,
+                    streamAudioLang = "jpn",
+                    subtitles =
+                        listOf(
+                            subtitle(0, "eng", default = true, title = "Signs & Songs"),
+                            subtitle(1, "eng", title = "Full Dialogue"),
+                        ),
+                    preferredKeywords = "full",
+                    avoidedKeywords = "signs, songs",
+                ),
+                // Avoided keywords never exclude: the only candidate still plays
+                TestInput(
+                    expectedIndex = 0,
+                    userSubtitleMode = SubtitlePlaybackMode.ALWAYS,
+                    subtitles =
+                        listOf(
+                            subtitle(0, "eng", default = true, title = "Signs & Songs"),
+                        ),
+                    avoidedKeywords = "signs",
+                ),
+                // Keyword matching is case-insensitive and ignores extra whitespace
+                TestInput(
+                    expectedIndex = 1,
+                    userSubtitleMode = SubtitlePlaybackMode.ALWAYS,
+                    subtitles =
+                        listOf(
+                            subtitle(0, "eng", default = true, title = "SIGNS/SONGS"),
+                            subtitle(1, "eng", title = "FULL SUBTITLES"),
+                        ),
+                    preferredKeywords = " Full , dialogue ",
+                ),
+                // Both keyword lists set: preferred match outranks unmatched, avoided sorts last
+                TestInput(
+                    expectedIndex = 2,
+                    userSubtitleMode = SubtitlePlaybackMode.ALWAYS,
+                    subtitles =
+                        listOf(
+                            subtitle(0, "eng", default = true, title = "Signs & Songs"),
+                            subtitle(1, "eng", title = "Commentary"),
+                            subtitle(2, "eng", title = "Full Dialogue"),
+                        ),
+                    preferredKeywords = "full",
+                    avoidedKeywords = "signs",
+                ),
+                // Keywords only reorder within the language preference, not across languages
+                TestInput(
+                    expectedIndex = 1,
+                    userSubtitleMode = SubtitlePlaybackMode.ALWAYS,
+                    userSubtitleLang = "eng",
+                    subtitles =
+                        listOf(
+                            subtitle(0, "spa", title = "Full Dialogue"),
+                            subtitle(1, "eng", title = "Signs & Songs"),
+                        ),
+                    preferredKeywords = "full",
+                ),
+                // Tracks without a title are unaffected by keywords
+                TestInput(
+                    expectedIndex = 0,
+                    userSubtitleMode = SubtitlePlaybackMode.ALWAYS,
+                    subtitles =
+                        listOf(
+                            subtitle(0, "eng", default = true),
+                            subtitle(1, "eng"),
+                        ),
+                    avoidedKeywords = "signs",
+                ),
+            )
+    }
+}
+
 data class TestInput(
     val expectedIndex: Int?,
     val userSubtitleMode: SubtitlePlaybackMode?,
@@ -759,6 +904,8 @@ data class TestInput(
     val subtitles: List<MediaStream>,
     val itemPlayback: ItemPlayback? = null,
     val plc: PlaybackLanguageChoice? = null,
+    val preferredKeywords: String = "",
+    val avoidedKeywords: String = "",
 ) {
     override fun toString(): String = "test(mode=$userSubtitleMode, subtitles=${subtitles.map { it.toShortString() }})"
 }
@@ -794,13 +941,18 @@ private fun runTest(input: TestInput) {
             serverRepo(input.userAudioLang, input.userSubtitleMode, input.userSubtitleLang),
             mockk<PlaybackLanguageChoiceDao>(),
         )
+    val appPreferences =
+        AppPreferences.getDefaultInstance().updatePlaybackPreferences {
+            subtitlePreferredKeywords = input.preferredKeywords
+            subtitleAvoidedKeywords = input.avoidedKeywords
+        }
     val result =
         service.chooseSubtitleStream(
             audioStreamLang = input.streamAudioLang,
             candidates = input.subtitles,
             itemPlayback = input.itemPlayback,
             playbackLanguageChoice = input.plc,
-            prefs = UserPreferences(AppPreferences.getDefaultInstance()),
+            prefs = UserPreferences(appPreferences),
         )
     Assert.assertEquals(input.expectedIndex, result?.index)
 }

@@ -353,6 +353,10 @@
     <string name="background_opacity">Background opacity</string>
     <string name="background_style">Background style</string>
     <string name="subtitle_style">Subtitle style</string>
+    <string name="subtitle_preferred_keywords">Preferred subtitle track keywords</string>
+    <string name="subtitle_preferred_keywords_summary">Comma-separated keywords to prioritize subtitle tracks by name (e.g. \"full, dialogue\")</string>
+    <string name="subtitle_avoided_keywords">Avoided subtitle track keywords</string>
+    <string name="subtitle_avoided_keywords_summary">Comma-separated keywords to deprioritize subtitle tracks by name (e.g. \"signs, songs\")</string>
     <string name="background_color">Background color</string>
     <string name="reset">Reset</string>
     <string name="bold_font">Bold font</string>

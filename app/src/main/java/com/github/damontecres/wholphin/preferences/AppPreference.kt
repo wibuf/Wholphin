@@ -644,6 +644,28 @@ sealed interface AppPreference<Pref, T> {
                 destination = Destination.Settings(PreferenceScreenOption.SKIP_SEGMENTS),
             )
 
+        val SubtitlePreferredKeywords =
+            AppStringPreference<AppPreferences>(
+                title = R.string.subtitle_preferred_keywords,
+                defaultValue = "",
+                getter = { it.playbackPreferences.subtitlePreferredKeywords },
+                setter = { prefs, value ->
+                    prefs.updatePlaybackPreferences { subtitlePreferredKeywords = value.trim() }
+                },
+                summary = R.string.subtitle_preferred_keywords_summary,
+            )
+
+        val SubtitleAvoidedKeywords =
+            AppStringPreference<AppPreferences>(
+                title = R.string.subtitle_avoided_keywords,
+                defaultValue = "",
+                getter = { it.playbackPreferences.subtitleAvoidedKeywords },
+                setter = { prefs, value ->
+                    prefs.updatePlaybackPreferences { subtitleAvoidedKeywords = value.trim() }
+                },
+                summary = R.string.subtitle_avoided_keywords_summary,
+            )
+
         val GlobalContentScale =
             AppChoicePreference<AppPreferences, PrefContentScale>(
                 title = R.string.global_content_scale,
@@ -1208,6 +1230,8 @@ val advancedPreferences =
                         AppPreference.CinemaMode,
                         AppPreference.GlobalContentScale,
                         AppPreference.SkipSegments,
+                        AppPreference.SubtitlePreferredKeywords,
+                        AppPreference.SubtitleAvoidedKeywords,
                         AppPreference.MaxBitrate,
                         AppPreference.RefreshRateSwitching,
                         AppPreference.ResolutionSwitching,

@@ -87,6 +87,9 @@ message PlaybackPreferences {
   bool resolution_switching = 23;
   string external_player = 24;
   bool cinema_mode = 25;
+  // Comma-separated keywords to prioritize or deprioritize subtitle tracks by title
+  string subtitle_preferred_keywords = 26;
+  string subtitle_avoided_keywords = 27;
 }
 
 message HomePagePreferences{
