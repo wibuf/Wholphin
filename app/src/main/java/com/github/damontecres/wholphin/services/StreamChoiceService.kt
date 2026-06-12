@@ -261,10 +261,16 @@ class StreamChoiceService
                             userConfig?.subtitleMode ?: SubtitlePlaybackMode.DEFAULT
                         }
                     }
+                val preferredKeywords =
+                    parseKeywords(prefs.appPreferences.playbackPreferences.subtitlePreferredKeywords)
+                val avoidedKeywords =
+                    parseKeywords(prefs.appPreferences.playbackPreferences.subtitleAvoidedKeywords)
                 val candidates =
                     candidates
                         .sortedWith(
-                            compareByDescending<MediaStream> { it.isExternal }
+                            compareByDescending<MediaStream> {
+                                keywordScore(it, preferredKeywords, avoidedKeywords)
+                            }.thenByDescending { it.isExternal }
                                 .thenByDescending { it.isDefault }
                                 .thenByDescending {
                                     !it.isForced && it.language.equals(subtitleLanguage, true)
@@ -316,11 +322,16 @@ class StreamChoiceService
                     }
 
                     SubtitlePlaybackMode.DEFAULT -> {
+                        // A preferred keyword match qualifies a track just like the default flag,
+                        // so users can pick a non-default track (eg "Full Dialogue") by keyword
+                        val isDefaultLike = { track: MediaStream ->
+                            track.isDefault || track.isForced || matchesKeyword(track, preferredKeywords)
+                        }
                         if (subtitleLanguage.isNotNullOrBlank()) {
-                            candidates.firstOrNull { it.language == subtitleLanguage && (it.isDefault || it.isForced) }
-                                ?: candidates.firstOrNull { it.isDefault || it.isForced }
+                            candidates.firstOrNull { it.language == subtitleLanguage && isDefaultLike(it) }
+                                ?: candidates.firstOrNull { isDefaultLike(it) }
                         } else {
-                            candidates.firstOrNull { it.isDefault || it.isForced }
+                            candidates.firstOrNull { isDefaultLike(it) }
                         }
                     }
 
@@ -329,6 +340,32 @@ class StreamChoiceService
                     }
                 }
             }
+        }
+
+        /** Returns true if the track's title matches any of the keywords (case-insensitive). */
+        private fun matchesKeyword(
+            track: MediaStream,
+            keywords: List<String>,
+        ): Boolean {
+            if (keywords.isEmpty()) return false
+            val title = track.title ?: track.displayTitle ?: return false
+            return keywords.any { title.contains(it, ignoreCase = true) }
+        }
+
+        /**
+         * Scores a track by the user's keyword preferences: preferred keyword matches rank above
+         * unmatched tracks, which rank above avoided keyword matches. Avoided keywords never
+         * exclude a track, so the only available track will still play even if avoided.
+         */
+        private fun keywordScore(
+            track: MediaStream,
+            preferredKeywords: List<String>,
+            avoidedKeywords: List<String>,
+        ): Int {
+            var score = 0
+            if (matchesKeyword(track, preferredKeywords)) score++
+            if (matchesKeyword(track, avoidedKeywords)) score--
+            return score
         }
 
         /** Returns true if the track is forced (via metadata flag or title patterns). */
@@ -360,6 +397,15 @@ class StreamChoiceService
             }
             // 3. Unknown language forced track
             return candidates.firstOrNull { it.language.isUnknown && isForcedOrSigns(it) }
+        }
+        companion object {
+            /** Splits a comma-separated keyword preference into non-blank keywords */
+            fun parseKeywords(value: String?): List<String> =
+                value
+                    ?.split(",")
+                    ?.map { it.trim() }
+                    ?.filter { it.isNotEmpty() }
+                    .orEmpty()
         }
     }
 
