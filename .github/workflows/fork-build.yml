@@ -1,0 +1,75 @@
+name: Fork branch build
+
+# Builds a debug APK for fork branches and publishes it as a rolling
+# prerelease, one per branch. Adapted from main.yml: debug-only so no
+# signing secrets are required, and upstream tags are fetched because
+# forks don't copy tags (the build derives its version from them).
+
+on:
+  push:
+    branches:
+      - claude/**
+  workflow_dispatch:
+
+defaults:
+  run:
+    shell: bash
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  BRANCH_NAME: ${{ github.ref_name }}
+  GRADLE_OPTS: "-Dorg.gradle.jvmargs='-Xmx8g -XX:MaxMetaspaceSize=512m'"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout the code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0 # Need the tags to build
+      - name: Fetch upstream tags
+        run: git fetch https://github.com/damontecres/Wholphin.git --tags
+      - name: Setup
+        uses: ./.github/actions/setup
+
+      - name: Get version names
+        run: |
+          LATEST_TAG=$(git describe --tags --match 'v*' --abbrev=0)
+          VERSION_NAME=$(git describe --tags --match 'v*' --long)
+          TAG_NAME="${BRANCH_NAME//\//-}"
+
+          echo "LATEST_TAG=$LATEST_TAG" >> "$GITHUB_ENV"
+          echo "VERSION_NAME=$VERSION_NAME" >> "$GITHUB_ENV"
+          echo "TAG_NAME=$TAG_NAME" >> "$GITHUB_ENV"
+      - name: Build debug app
+        run: |
+          ./gradlew assembleDefaultDebug --no-daemon
+
+      - name: Checksums
+        run: |
+          echo "SHA256 checksums:"
+          find app/build/outputs/apk -name '*.apk' -print0 | xargs -0 sha256sum
+
+      - name: Publish ${{ env.TAG_NAME }} prerelease
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          shopt -s globstar
+
+          gh release delete "${{ env.TAG_NAME }}" --cleanup-tag -y || true
+
+          echo '### `${{ env.BRANCH_NAME }}` fork build (debug variant)
+
+          Installs side-by-side with the official Wholphin release as a separate `.debug` package.
+
+          To let the installed app update itself from this branch, set Settings->Advanced->Update URL to https://api.github.com/repos/${{ github.repository }}/releases/tags/${{ env.TAG_NAME }}' > ci_release_note.txt
+
+          gh release create "${{ env.TAG_NAME }}" \
+            --latest=false --prerelease --title "${{ env.VERSION_NAME }} (${{ env.BRANCH_NAME }})" --target "${{ env.BRANCH_NAME }}" -F ci_release_note.txt \
+            app/build/outputs/apk/**/*.apk
