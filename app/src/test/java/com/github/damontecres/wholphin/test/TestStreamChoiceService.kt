@@ -895,6 +895,114 @@ class TestStreamChoiceServiceKeywords(
     }
 }
 
+/**
+ * Edge cases prompted by a report that playback fails on items where no subtitle
+ * carries a configured keyword. These probe exactly when the keyword preferences
+ * turn a subtitle ON, since force-enabling an image-based (PGS/VOBSUB) track makes
+ * the server burn it in and can break playback.
+ *
+ * The equivalence cases (no keyword matches any track) assert the selection is
+ * identical to stock behavior, so a green run rules the selector OUT as the cause
+ * for "no tagged subtitle" items and points downstream to subtitle rendering.
+ */
+@RunWith(Parameterized::class)
+class TestStreamChoiceServiceKeywordEdgeCases(
+    val input: TestInput,
+) {
+    @Test
+    fun test() {
+        runTest(input)
+    }
+
+    companion object {
+        @JvmStatic
+        @Parameterized.Parameters(name = "{index}: {0}")
+        fun data(): Collection<TestInput> =
+            listOf(
+                // No subtitle tracks at all, keywords set -> null, must not crash
+                TestInput(
+                    expectedIndex = null,
+                    userSubtitleMode = SubtitlePlaybackMode.ALWAYS,
+                    subtitles = emptyList(),
+                    preferredKeywords = "full",
+                    avoidedKeywords = "signs",
+                ),
+                // DEFAULT mode, no track matches a keyword and none is flagged
+                // default/forced -> null, same as stock (no spurious subtitle)
+                TestInput(
+                    expectedIndex = null,
+                    userSubtitleMode = SubtitlePlaybackMode.DEFAULT,
+                    subtitles =
+                        listOf(
+                            subtitle(0, "eng", title = "Full Dialogue"),
+                            subtitle(1, "spa"),
+                        ),
+                    preferredKeywords = "commentary",
+                    avoidedKeywords = "signs",
+                ),
+                // ALWAYS mode, no keyword match -> same track stock would pick (index 0)
+                TestInput(
+                    expectedIndex = 0,
+                    userSubtitleMode = SubtitlePlaybackMode.ALWAYS,
+                    subtitles =
+                        listOf(
+                            subtitle(0, "eng", title = "Dialogue"),
+                            subtitle(1, "spa"),
+                        ),
+                    preferredKeywords = "full",
+                    avoidedKeywords = "signs",
+                ),
+                // SMART mode, audio differs from preferred sub language, no keyword
+                // match -> picks preferred-language track exactly as stock does
+                TestInput(
+                    expectedIndex = 0,
+                    userSubtitleMode = SubtitlePlaybackMode.SMART,
+                    streamAudioLang = "jpn",
+                    subtitles =
+                        listOf(
+                            subtitle(0, "eng", default = true),
+                            subtitle(1, "spa"),
+                        ),
+                    preferredKeywords = "full",
+                ),
+                // Avoided keyword must NOT exclude: the only track still plays
+                TestInput(
+                    expectedIndex = 0,
+                    userSubtitleMode = SubtitlePlaybackMode.ALWAYS,
+                    subtitles =
+                        listOf(
+                            subtitle(0, "eng", title = "Signs & Songs"),
+                        ),
+                    avoidedKeywords = "signs",
+                ),
+                // Avoided keyword must NOT drop an otherwise-default subtitle in DEFAULT mode
+                TestInput(
+                    expectedIndex = 0,
+                    userSubtitleMode = SubtitlePlaybackMode.DEFAULT,
+                    subtitles =
+                        listOf(
+                            subtitle(0, "eng", default = true, title = "Signs & Songs"),
+                        ),
+                    avoidedKeywords = "signs",
+                ),
+                // BEHAVIOR CHANGE: DEFAULT mode force-enables a keyword-matched track
+                // that stock would leave OFF (no default/forced flag). This is the one
+                // case where the feature turns a subtitle on; the prime suspect if that
+                // track is image-based and burn-in transcode fails.
+                TestInput(
+                    expectedIndex = 0,
+                    userSubtitleMode = SubtitlePlaybackMode.DEFAULT,
+                    subtitles =
+                        listOf(
+                            subtitle(0, "eng", title = "Full Dialogue"),
+                            subtitle(1, "eng", title = "Signs & Songs"),
+                        ),
+                    preferredKeywords = "full",
+                ),
+            )
+    }
+}
+
 data class TestInput(
     val expectedIndex: Int?,
     val userSubtitleMode: SubtitlePlaybackMode?,
