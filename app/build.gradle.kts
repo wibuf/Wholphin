@@ -107,6 +107,10 @@ configure<ApplicationExtension> {
                 "proguard-rules.pro",
             )
             isDebuggable = false
+            // Personal fork builds (-PforkBuild) install side-by-side with the official app
+            if (project.hasProperty("forkBuild")) {
+                applicationIdSuffix = ".fork"
+            }
             if (shouldSign.get()) {
                 signingConfig = signingConfigs.getByName("ci")
             } else {
