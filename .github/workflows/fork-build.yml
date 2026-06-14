@@ -1,9 +1,13 @@
 name: Fork branch build
 
-# Builds a debug APK for fork branches and publishes it as a rolling
-# prerelease, one per branch. Adapted from main.yml: debug-only so no
-# signing secrets are required, and upstream tags are fetched because
-# forks don't copy tags (the build derives its version from them).
+# Builds a full, SIGNED RELEASE APK for personal fork branches and publishes it
+# as a rolling per-branch prerelease. Uses the same prebuilt playback extensions
+# (MPV/FFmpeg/AV1) as the official app, pulled from the public GitHub Packages
+# repo and authenticated with your own read:packages token.
+#
+# Required repo secrets (Settings -> Secrets and variables -> Actions):
+#   SIGNING_KEY, KEY_ALIAS, KEY_PASSWORD, KEY_STORE_PASSWORD  -> stable signing key
+#   EXTENSIONS_USERNAME, EXTENSIONS_PASSWORD                  -> GitHub username + read:packages PAT
 
 on:
   push:
@@ -35,6 +39,26 @@ jobs:
           fetch-depth: 0 # Need the tags to build
       - name: Fetch upstream tags
         run: git fetch https://github.com/damontecres/Wholphin.git --tags
+
+      - name: Verify required secrets
+        env:
+          SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          KEY_STORE_PASSWORD: ${{ secrets.KEY_STORE_PASSWORD }}
+          EXTENSIONS_USERNAME: ${{ secrets.EXTENSIONS_USERNAME }}
+          EXTENSIONS_PASSWORD: ${{ secrets.EXTENSIONS_PASSWORD }}
+        run: |
+          missing=
+          for s in SIGNING_KEY KEY_ALIAS KEY_PASSWORD KEY_STORE_PASSWORD EXTENSIONS_USERNAME EXTENSIONS_PASSWORD; do
+            [ -z "${!s}" ] && missing="$missing $s"
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Missing required repo secrets:$missing — add them under Settings -> Secrets and variables -> Actions, then re-run this workflow."
+            exit 1
+          fi
+          echo "All required secrets present."
+
       - name: Setup
         uses: ./.github/actions/setup
 
@@ -43,13 +67,26 @@ jobs:
           LATEST_TAG=$(git describe --tags --match 'v*' --abbrev=0)
           VERSION_NAME=$(git describe --tags --match 'v*' --long)
           TAG_NAME="${BRANCH_NAME//\//-}"
-
           echo "LATEST_TAG=$LATEST_TAG" >> "$GITHUB_ENV"
           echo "VERSION_NAME=$VERSION_NAME" >> "$GITHUB_ENV"
           echo "TAG_NAME=$TAG_NAME" >> "$GITHUB_ENV"
-      - name: Build debug app
+
+      - name: Build signed release app (with extensions)
+        env:
+          KEY_ALIAS: "${{ secrets.KEY_ALIAS }}"
+          KEY_PASSWORD: "${{ secrets.KEY_PASSWORD }}"
+          KEY_STORE_PASSWORD: "${{ secrets.KEY_STORE_PASSWORD }}"
+          SIGNING_KEY: "${{ secrets.SIGNING_KEY }}"
+          ORG_GRADLE_PROJECT_WholphinExtensionsUsername: "${{ secrets.EXTENSIONS_USERNAME }}"
+          ORG_GRADLE_PROJECT_WholphinExtensionsPassword: "${{ secrets.EXTENSIONS_PASSWORD }}"
         run: |
-          ./gradlew assembleDefaultDebug --no-daemon
+          ./gradlew assembleDefaultRelease -PforkBuild --no-daemon
+
+      - name: Verify APK signatures
+        run: |
+          echo "Verifying APK signatures"
+          find app/build/outputs/apk -name '*.apk' -print0 |
+            xargs -t -0 -n1 "${{ env.ANDROID_SDK_ROOT }}/build-tools/${{ env.BUILD_TOOLS_VERSION }}/apksigner" verify --verbose --print-certs
 
       - name: Checksums
         run: |
@@ -64,9 +101,9 @@ jobs:
 
           gh release delete "${{ env.TAG_NAME }}" --cleanup-tag -y || true
 
-          echo '### `${{ env.BRANCH_NAME }}` fork build (debug variant)
+          echo '### `${{ env.BRANCH_NAME }}` fork build (signed release, full extensions)
 
-          Installs side-by-side with the official Wholphin release as a separate `.debug` package.
+          Full release build with the same playback extensions (MPV / FFmpeg / AV1) as the official app. Installs side-by-side with the official Wholphin release as a separate `.fork` package.
 
           To let the installed app update itself from this branch, set Settings->Advanced->Update URL to https://api.github.com/repos/${{ github.repository }}/releases/tags/${{ env.TAG_NAME }}' > ci_release_note.txt
 
