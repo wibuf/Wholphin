@@ -197,6 +197,14 @@ configure<ApplicationExtension> {
         getByName("main") {
             kotlin.directories += "$buildDir/generated/seerr_api/src/main/kotlin"
         }
+        // Personal fork builds (-PforkBuild) relabel the launcher entry so the
+        // side-by-side install is tellable apart from the official app. Build
+        // type resources win over main, so this overrides app_name rather than
+        // colliding with it, and no shared file has to be touched.
+        if (project.hasProperty("forkBuild")) {
+            getByName("release") { res.srcDir("src/fork/res") }
+            getByName("debug") { res.srcDir("src/fork/res") }
+        }
     }
 
     testOptions {

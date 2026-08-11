@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+        Fork builds only (-PforkBuild). These override the values in
+        src/main/res, so the personal build is distinguishable from the official
+        app it installs alongside.
+    -->
+    <string name="app_name" translatable="false">Wholphin+</string>
+</resources>
