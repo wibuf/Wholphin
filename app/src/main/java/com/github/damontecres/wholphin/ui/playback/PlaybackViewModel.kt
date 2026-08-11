@@ -3,6 +3,7 @@ package com.github.damontecres.wholphin.ui.playback
 import android.content.Context
 import android.media.MediaCodecList
 import android.os.Build
+import android.os.SystemClock
 import android.widget.Toast
 import androidx.annotation.OptIn
 import androidx.compose.ui.unit.Density
@@ -26,6 +27,7 @@ import androidx.media3.session.MediaSession
 import coil3.imageLoader
 import coil3.request.ImageRequest
 import coil3.size.Size
+import com.github.damontecres.wholphin.R
 import com.github.damontecres.wholphin.data.ItemPlaybackDao
 import com.github.damontecres.wholphin.data.ItemPlaybackRepository
 import com.github.damontecres.wholphin.data.ServerRepository
@@ -187,6 +189,9 @@ class PlaybackViewModel
         private var activityListener: TrackActivityPlaybackListener? = null
         private var trackChangeListener: TracksChangedListener? = null
         private val jobs = mutableListOf<Job>()
+
+        private val liveTvRetryPolicy = LiveTvRetryPolicy()
+        private var liveTvRetryJob: Job? = null
 
         private val isPlaylist = destination is Destination.PlaybackList
 
@@ -460,10 +465,19 @@ class PlaybackViewModel
                     )
                     return@withContext false
                 }
+                // Switching to a different item starts its own set of live TV retries. Restarts of
+                // the same stream keep their counter so a dead channel still gives up.
+                if (!this@PlaybackViewModel::itemId.isInitialized ||
+                    this@PlaybackViewModel.itemId != item.id
+                ) {
+                    liveTvRetryPolicy.reset()
+                }
                 this@PlaybackViewModel.currentItem = playlistItem
                 this@PlaybackViewModel.itemId = item.id
 
-                val isLiveTv = item.type == BaseItemKind.TV_CHANNEL
+                // Same predicate as the retry logic, so the two cannot disagree about whether an
+                // item is a live stream and leave it selecting sources it does not have
+                val isLiveTv = item.type.isLiveTvStream
                 val base = item.data
 
                 // Use the provided playback parameters or else check if the database has some
@@ -1372,6 +1386,14 @@ class PlaybackViewModel
         override fun onPlayerError(error: PlaybackException) {
             Timber.e(error, "Playback error")
             viewModelScope.launch(WholphinDispatchers.Main + ExceptionHandler()) {
+                // Live TV drops are usually transient, so restart the stream a few times before
+                // surfacing the error. Handled before the play method dispatch below because a
+                // live channel is served straight from the tuner and so fails while direct
+                // playing at least as often as while transcoding, and because the fallback below
+                // resumes from a position that means nothing for a live stream.
+                if (retryLiveTvStream()) {
+                    return@launch
+                }
                 state.value.currentPlayback?.let {
                     when (it.playMethod) {
                         PlayMethod.TRANSCODE -> {
@@ -1411,8 +1433,60 @@ class PlaybackViewModel
             }
         }
 
+        /**
+         * Restart a failed live TV stream, if it is live TV and it has retries left
+         *
+         * Playback is restarted through [play] rather than [Player.prepare] because the server
+         * opens a new live stream for each playback request, so the URL the player is holding is
+         * dead once the tuner has dropped it and re-preparing it would just fail again straight
+         * away. [changeStreams] re-requests playback info too, but it short circuits into
+         * [changeStreamsDirectPlay] when the current stream is direct playing, which only swaps
+         * track selections on the media item that has already failed.
+         *
+         * @return true if a restart was scheduled, false if the caller should show the error
+         */
+        private fun retryLiveTvStream(): Boolean {
+            if (!this::currentItem.isInitialized || !currentItem.item.type.isLiveTvStream) {
+                return false
+            }
+            val attempt = liveTvRetryPolicy.onFailure(SystemClock.elapsedRealtime())
+            if (attempt == null) {
+                Timber.w("Live TV stream failed too many times, giving up")
+                return false
+            }
+            Timber.i("Live TV stream failed, restarting (attempt %d of %d)", attempt, LIVE_TV_MAX_RETRIES)
+            // Show the loading spinner instead of the error page while reconnecting
+            _state.update { it.copy(loading = LoadingState.Loading) }
+            liveTvRetryJob?.cancel()
+            // Deliberately not registered in [jobs]: play() below can rebuild the player, and
+            // disconnectPlayer() cancels everything in [jobs], which would cancel this retry
+            // part way through. It is cancelled by release() and by viewModelScope instead.
+            liveTvRetryJob =
+                viewModelScope.launch(WholphinDispatchers.Main + ExceptionHandler()) {
+                    showToast(
+                        context,
+                        context.getString(
+                            R.string.live_tv_reconnecting,
+                            attempt,
+                            LIVE_TV_MAX_RETRIES,
+                        ),
+                        Toast.LENGTH_SHORT,
+                    )
+                    // Back off a little further on each attempt
+                    delay(LIVE_TV_RETRY_DELAY * attempt)
+                    if (!play(currentItem, 0L)) {
+                        _state.update {
+                            it.copy(loading = LoadingState.Error("Error during playback"))
+                        }
+                    }
+                }
+            return true
+        }
+
         fun release() {
             Timber.v("release")
+            liveTvRetryJob?.cancel()
+            liveTvRetryJob = null
             disconnectPlayer()
             activityListener = null
         }
