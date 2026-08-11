@@ -5,8 +5,32 @@ import com.github.damontecres.wholphin.R
 import com.github.damontecres.wholphin.preferences.PrefContentScale
 import org.jellyfin.sdk.model.api.BaseItemKind
 import org.jellyfin.sdk.model.api.CollectionType
+import kotlin.time.Duration.Companion.seconds
 
 val playbackSpeedOptions = listOf(".25", ".5", ".75", "1.0", "1.25", "1.5", "1.75", "2.0")
+
+/**
+ * Whether the item is a live stream from a tuner rather than a fixed file
+ *
+ * Live streams can drop out briefly when the tuner or the server's transcoder hiccups, so a
+ * playback failure is often transient and worth retrying.
+ */
+val BaseItemKind.isLiveTvStream: Boolean
+    get() = this == BaseItemKind.TV_CHANNEL || this == BaseItemKind.LIVE_TV_CHANNEL
+
+/** How many times to restart a failed live TV stream before giving up and showing an error */
+const val LIVE_TV_MAX_RETRIES = 3
+
+/** Delay before restarting a failed live TV stream, multiplied by the attempt number */
+val LIVE_TV_RETRY_DELAY = 2.seconds
+
+/**
+ * If a live stream ran for at least this long before failing, the retry counter is reset
+ *
+ * Without this, a channel watched for hours would eventually exhaust its retries and stop
+ * recovering from a hiccup, while a stream that is genuinely broken still gives up quickly.
+ */
+val LIVE_TV_RETRY_RESET_AFTER = 60.seconds
 
 val playbackScaleOptions =
     mapOf(
