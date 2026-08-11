@@ -88,9 +88,20 @@ message PlaybackPreferences {
   string external_player = 24;
   bool cinema_mode = 25;
   DpadSeekMode dpad_seek_mode = 26;
+
+  // Fork-only fields, deliberately numbered far above upstream's sequence.
+  //
+  // Protobuf identifies a field by its NUMBER, so if upstream ever adds a field
+  // that lands on one of these, the stored value does not reset — it is read
+  // back as whatever field now owns that number, silently shifting one setting
+  // into another. That happened once already: these were 26 and 27, upstream
+  // took 26, and every saved preferred list came back holding the avoided one.
+  // Upstream numbers sequentially and will not reach 500, so leave these alone
+  // when resolving a rebase, even if the numbers look out of place.
+  //
   // Comma-separated keywords to prioritize or deprioritize subtitle tracks by title
-  string subtitle_preferred_keywords = 27;
-  string subtitle_avoided_keywords = 28;
+  string subtitle_preferred_keywords = 500;
+  string subtitle_avoided_keywords = 501;
 }
 
 enum DpadSeekMode {
