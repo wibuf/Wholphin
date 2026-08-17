@@ -72,6 +72,7 @@ import com.github.damontecres.wholphin.util.PlaybackItemState
 import com.github.damontecres.wholphin.util.TrackActivityPlaybackListener
 import com.github.damontecres.wholphin.util.WholphinDispatchers
 import com.github.damontecres.wholphin.util.checkForSupport
+import com.github.damontecres.wholphin.util.mpv.applyAudioFiltersToMpv
 import com.github.damontecres.wholphin.util.mpv.mpvDeviceProfile
 import com.github.damontecres.wholphin.util.profile.Codec
 import com.github.damontecres.wholphin.util.subtitleMimeTypes
@@ -1709,6 +1710,8 @@ class PlaybackViewModel
                         configuration,
                         density,
                     )
+                    preferences.appPreferences.playbackPreferences.mpvOptions
+                        .applyAudioFiltersToMpv()
                 }
             }
         }

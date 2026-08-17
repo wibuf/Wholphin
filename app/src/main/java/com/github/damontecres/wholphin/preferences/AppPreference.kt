@@ -951,6 +951,28 @@ sealed interface AppPreference<Pref, T> {
                 summaryOff = R.string.disabled,
             )
 
+        val MpvBoostDialogue =
+            AppSwitchPreference<AppPreferences>(
+                title = R.string.mpv_boost_dialogue,
+                defaultValue = false,
+                getter = { it.playbackPreferences.mpvOptions.boostDialogue },
+                setter = { prefs, value ->
+                    prefs.updateMpvOptions { boostDialogue = value }
+                },
+                summary = R.string.mpv_boost_dialogue_summary,
+            )
+
+        val MpvCompressLoudScenes =
+            AppSwitchPreference<AppPreferences>(
+                title = R.string.mpv_compress_loud_scenes,
+                defaultValue = false,
+                getter = { it.playbackPreferences.mpvOptions.compressLoudScenes },
+                setter = { prefs, value ->
+                    prefs.updateMpvOptions { compressLoudScenes = value }
+                },
+                summary = R.string.mpv_compress_loud_scenes_summary,
+            )
+
         val MpvConfFile =
             AppClickablePreference<AppPreferences>(
                 title = R.string.mpv_conf,
@@ -1208,6 +1230,8 @@ private val MpvSettings =
     listOf(
         AppPreference.MpvHardwareDecoding,
         AppPreference.MpvGpuNext,
+        AppPreference.MpvBoostDialogue,
+        AppPreference.MpvCompressLoudScenes,
         AppPreference.MpvConfFile,
     )
 
