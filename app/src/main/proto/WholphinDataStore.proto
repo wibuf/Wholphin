@@ -40,6 +40,13 @@ enum PlayerBackend{
 message MpvOptions{
   bool enable_hardware_decoding = 1;
   bool use_gpu_next = 2;
+
+  // Fork-only fields, numbered far above upstream's sequence on purpose.
+  // See the note on subtitle_preferred_keywords in PlaybackPreferences: a
+  // number upstream later claims does not reset the setting, it silently
+  // hands the stored value to whichever field owns that number afterwards.
+  bool boost_dialogue = 500;
+  bool compress_loud_scenes = 501;
 }
 
 enum AssPlaybackMode{

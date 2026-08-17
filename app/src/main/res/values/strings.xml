@@ -370,6 +370,10 @@
     <string name="subtitle_avoided_keywords">Avoided subtitle track keywords</string>
     <string name="subtitle_avoided_keywords_summary">Comma-separated keywords to deprioritize subtitle tracks by name (e.g. \"signs, songs\")</string>
     <string name="live_tv_reconnecting">Reconnecting… (attempt %1$d of %2$d)</string>
+    <string name="mpv_boost_dialogue">Boost dialogue in surround audio</string>
+    <string name="mpv_boost_dialogue_summary">Downmix surround to stereo with the centre channel raised, so speech stays above the rest of the mix on TV speakers</string>
+    <string name="mpv_compress_loud_scenes">Even out loud scenes</string>
+    <string name="mpv_compress_loud_scenes_summary">Reduce the gap between quiet dialogue and loud action, so you do not have to keep changing the volume</string>
     <string name="background_color">Background color</string>
     <string name="reset">Reset</string>
     <string name="bold_font">Bold font</string>
