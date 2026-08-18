@@ -25,6 +25,15 @@ const val LIVE_TV_MAX_RETRIES = 3
 val LIVE_TV_RETRY_DELAY = 2.seconds
 
 /**
+ * How long a live stream may sit buffering before it is treated as failed
+ *
+ * A dropped live stream does not always report an error: the tuner can stop feeding the server
+ * while the connection stays open, and the player then buffers forever with nothing to react to.
+ * Long enough that a slow tune-in is not mistaken for a hang.
+ */
+val LIVE_TV_STALL_TIMEOUT = 20.seconds
+
+/**
  * If a live stream ran for at least this long before failing, the retry counter is reset
  *
  * Without this, a channel watched for hours would eventually exhaust its retries and stop

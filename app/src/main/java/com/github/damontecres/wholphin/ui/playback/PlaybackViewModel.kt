@@ -193,6 +193,7 @@ class PlaybackViewModel
 
         private val liveTvRetryPolicy = LiveTvRetryPolicy()
         private var liveTvRetryJob: Job? = null
+        private var liveTvStallJob: Job? = null
 
         private val isPlaylist = destination is Destination.PlaybackList
 
@@ -472,6 +473,7 @@ class PlaybackViewModel
                     this@PlaybackViewModel.itemId != item.id
                 ) {
                     liveTvRetryPolicy.reset()
+                    cancelLiveTvStallWatchdog()
                 }
                 this@PlaybackViewModel.currentItem = playlistItem
                 this@PlaybackViewModel.itemId = item.id
@@ -1078,6 +1080,15 @@ class PlaybackViewModel
             }
 
         override fun onPlaybackStateChanged(playbackState: Int) {
+            when (playbackState) {
+                // A live stream that stops feeding does not necessarily report an error, so a
+                // buffer that never ends is the only sign that anything is wrong
+                Player.STATE_BUFFERING -> armLiveTvStallWatchdog()
+
+                Player.STATE_READY -> cancelLiveTvStallWatchdog()
+
+                Player.STATE_IDLE -> cancelLiveTvStallWatchdog()
+            }
             if (playbackState == Player.STATE_ENDED) {
                 Timber.v("Playback state is STATE_ENDED")
                 viewModelScope.launchDefault {
@@ -1484,8 +1495,51 @@ class PlaybackViewModel
             return true
         }
 
+        /**
+         * Start watching for a live stream that is buffering and never recovers
+         *
+         * [onPlayerError] only fires when the player actually reports a failure. A live stream can
+         * instead just stop being fed while the connection stays open, which leaves the player
+         * buffering indefinitely with no error to react to and no retry ever starting. Treating a
+         * long enough buffer as a failure routes it into the same retry path.
+         */
+        private fun armLiveTvStallWatchdog() {
+            if (!this::currentItem.isInitialized || !currentItem.item.type.isLiveTvStream) {
+                return
+            }
+            if (liveTvStallJob?.isActive == true) {
+                // Already watching this buffer, do not restart the clock
+                return
+            }
+            liveTvStallJob =
+                viewModelScope.launch(WholphinDispatchers.Main + ExceptionHandler()) {
+                    delay(LIVE_TV_STALL_TIMEOUT)
+                    // This watch is spent. Clear it before retrying, or the restart's own buffer
+                    // would see a still-running job and decline to arm a fresh watchdog.
+                    liveTvStallJob = null
+                    Timber.w(
+                        "Live TV stream buffered for %s without recovering, treating as failed",
+                        LIVE_TV_STALL_TIMEOUT,
+                    )
+                    if (!retryLiveTvStream()) {
+                        _state.update {
+                            it.copy(
+                                loading = LoadingState.Error("Live TV stream stopped responding"),
+                            )
+                        }
+                    }
+                }
+        }
+
+        /** Playback recovered or stopped, so stop waiting for it to */
+        private fun cancelLiveTvStallWatchdog() {
+            liveTvStallJob?.cancel()
+            liveTvStallJob = null
+        }
+
         fun release() {
             Timber.v("release")
+            cancelLiveTvStallWatchdog()
             liveTvRetryJob?.cancel()
             liveTvRetryJob = null
             disconnectPlayer()
