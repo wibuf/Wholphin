@@ -9,6 +9,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.github.damontecres.wholphin.R
 import com.github.damontecres.wholphin.services.ImageUrlService
+import com.github.damontecres.wholphin.services.MdbListRatingsService
 import org.jellyfin.sdk.model.api.ItemFields
 
 // This file is for constants used for the UI
@@ -17,6 +18,11 @@ val FontAwesome = FontFamily(Font(resId = R.font.fa_solid_900))
 
 val LocalImageUrlService =
     staticCompositionLocalOf<ImageUrlService> { throw IllegalStateException("LocalImageUrlService not set") }
+
+val LocalMdbListRatingsService =
+    staticCompositionLocalOf<MdbListRatingsService> {
+        throw IllegalStateException("LocalMdbListRatingsService not set")
+    }
 
 /**
  * Colors not associated with the theme

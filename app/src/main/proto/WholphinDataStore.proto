@@ -208,6 +208,17 @@ enum DisplayToggle{
   OFFICIAL_RATING = 0;
   CRITIC_RATING = 1;
   COMMUNITY_RATING = 2;
+
+  // Fork-only ratings from the MDBList Ratings server plugin. Numbered far above
+  // upstream's sequence on purpose: see the note on subtitle_preferred_keywords.
+  // A number upstream later claims does not reset the setting, it hands the stored
+  // value to whichever entry owns that number, silently turning one toggle into
+  // another. New entries go at the END of this list, because the settings screen
+  // pairs entries with display_toggle_types by declaration order, not by number.
+  MDBLIST_IMDB = 500;
+  MDBLIST_TOMATOES = 501;
+  MDBLIST_POPCORN = 502;
+  MDBLIST_TMDB = 503;
 }
 
 message InterfacePreferences {

@@ -381,6 +381,11 @@
     <string name="mpv_boost_dialogue_summary">Downmix surround to stereo with the centre channel raised, so speech stays above the rest of the mix on TV speakers</string>
     <string name="mpv_compress_loud_scenes">Even out loud scenes</string>
     <string name="mpv_compress_loud_scenes_summary">Reduce the gap between quiet dialogue and loud action, so you do not have to keep changing the volume</string>
+    <string name="mdblist_imdb" translatable="false">IMDb</string>
+    <string name="mdblist_tomatoes" translatable="false">Rotten Tomatoes</string>
+    <string name="mdblist_popcorn" translatable="false">Rotten Tomatoes audience</string>
+    <string name="mdblist_tmdb" translatable="false">TMDB</string>
+    <string name="mdblist_requires_plugin">Requires the MDBList Ratings plugin on the server</string>
     <string name="background_color">Background color</string>
     <string name="reset">Reset</string>
     <string name="bold_font">Bold font</string>
@@ -775,11 +780,19 @@
         <item>@string/official_rating</item>
         <item>@string/critic_rating</item>
         <item>@string/community_rating</item>
+        <item>@string/mdblist_imdb</item>
+        <item>@string/mdblist_tomatoes</item>
+        <item>@string/mdblist_popcorn</item>
+        <item>@string/mdblist_tmdb</item>
     </string-array>
     <string-array name="display_toggle_types_subtitles">
         <item></item><!-- Intentionally blank -->
         <item>@string/tomatoes</item>
         <item>@string/stars</item>
+        <item>@string/mdblist_requires_plugin</item>
+        <item>@string/mdblist_requires_plugin</item>
+        <item>@string/mdblist_requires_plugin</item>
+        <item>@string/mdblist_requires_plugin</item>
     </string-array>
 
     <string name="search_for">Search %s</string>
