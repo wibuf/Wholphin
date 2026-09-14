@@ -1,6 +1,7 @@
 package com.github.damontecres.wholphin.services
 
 import com.github.damontecres.wholphin.data.model.MdbListRatingsResponse
+import com.github.damontecres.wholphin.data.model.MdbListSource
 import kotlinx.serialization.json.Json
 import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.api.client.HttpMethod
@@ -72,6 +73,52 @@ class MdbListRatingsService
                 null
             }
 
+        /**
+         * URL for a rating source's icon, served by the plugin itself
+         *
+         * Using the plugin's own artwork rather than bundling any keeps the brand marks where they
+         * came from, and gives Rotten Tomatoes its separate fresh/rotten and positive/negative
+         * audience variants for free.
+         *
+         * No credentials go in the URL: the OkHttp client behind Coil already adds the
+         * Authorization header for this server, so the icon loads like any other server image.
+         */
+        fun iconUrl(
+            source: MdbListSource,
+            value: Double,
+        ): String {
+            val file =
+                when (source) {
+                    MdbListSource.IMDB -> {
+                        "IMDb.png"
+                    }
+
+                    MdbListSource.TMDB -> {
+                        "TMDB.png"
+                    }
+
+                    MdbListSource.TOMATOES -> {
+                        if (value >= FRESH_THRESHOLD) {
+                            "Rotten_Tomatoes.png"
+                        } else {
+                            "Rotten_Tomatoes_rotten.png"
+                        }
+                    }
+
+                    MdbListSource.POPCORN -> {
+                        if (value >= FRESH_THRESHOLD) {
+                            "Rotten_Tomatoes_positive_audience.png"
+                        } else {
+                            "Rotten_Tomatoes_negative_audience.png"
+                        }
+                    }
+                }
+            return api.createUrl(
+                pathTemplate = "/Plugins/MdbListRatings/Assets/{file}",
+                pathParameters = mapOf("file" to file),
+            )
+        }
+
         /** Forget everything, eg on sign out or when switching servers */
         fun clear() {
             synchronized(cache) { cache.clear() }
@@ -80,5 +127,8 @@ class MdbListRatingsService
         companion object {
             private const val PATH = "/Plugins/MdbListRatings/CachedByItemId"
             private const val CACHE_SIZE = 200
+
+            /** Rotten Tomatoes calls 60% and above fresh, for both critics and audience */
+            const val FRESH_THRESHOLD = 60.0
         }
     }

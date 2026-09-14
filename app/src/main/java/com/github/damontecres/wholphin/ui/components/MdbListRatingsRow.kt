@@ -1,27 +1,32 @@
 package com.github.damontecres.wholphin.ui.components
 
-import androidx.compose.foundation.text.appendInlineContent
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
+import androidx.tv.material3.Text
+import coil3.compose.AsyncImage
 import com.github.damontecres.wholphin.data.model.MdbListRatingsResponse
 import com.github.damontecres.wholphin.data.model.MdbListSource
 import com.github.damontecres.wholphin.preferences.DisplayToggle
 import com.github.damontecres.wholphin.ui.LocalMdbListRatingsService
-import com.github.damontecres.wholphin.ui.dot
 import com.github.damontecres.wholphin.ui.util.LocalInterfaceCustomization
 import org.jellyfin.sdk.model.UUID
 import java.util.Locale
 
-/** Which toggle turns each source on, and therefore which sources can appear at all */
+/** Which toggle turns each source on, in the order they are shown */
 private val SOURCE_TOGGLES =
     listOf(
         MdbListSource.IMDB to DisplayToggle.MDBLIST_IMDB,
@@ -30,61 +35,42 @@ private val SOURCE_TOGGLES =
         MdbListSource.TMDB to DisplayToggle.MDBLIST_TMDB,
     )
 
+/** Tall enough to read across a room without crowding the line it sits on */
+private val ICON_HEIGHT = 22.dp
+
 /**
- * Format one source's rating the way the existing Jellyfin ratings are formatted
+ * The rating for a source in that source's own scale, or null when there is nothing to show
  *
- * IMDb is out of ten and keeps a decimal; the rest are percentages. Rotten Tomatoes gets the fresh
- * or rotten icon on the same 60% boundary the critic rating already uses, so the two cannot
- * disagree about what counts as fresh.
- *
- * Returns null when the plugin has no value for that source, so nothing renders rather than an
- * empty gap.
+ * The plugin returns some sources bare, eg {"source":"letterboxd"} with no numbers at all, and
+ * others with votes but no rating. Where only the normalised score is present it has to be
+ * converted for IMDb, because score is always 0-100 while IMDb's own scale is out of ten: taking
+ * the score as-is would render 8.9 as 89.
  */
-fun MdbListRatingsResponse.annotatedFor(source: MdbListSource): AnnotatedString? {
+fun MdbListRatingsResponse.valueFor(source: MdbListSource): Double? {
     val rating = forSource(source) ?: return null
-    // The plugin returns some sources with no numbers at all, eg {"source":"letterboxd"}, and
-    // others with votes but no rating. Both mean there is nothing to show.
-    //
-    // Where only the normalised score is present it has to be converted, because score is always
-    // 0-100 while IMDb's own scale is out of ten. Taking score as-is would render 8.9 as 89.
-    val value =
-        rating.value
-            ?: rating.score?.let { if (source == MdbListSource.IMDB) it / 10.0 else it }
-            ?: return null
-    return buildAnnotatedString {
-        dot()
-        when (source) {
-            MdbListSource.IMDB -> {
-                append(String.format(Locale.getDefault(), "%.1f", value))
-                appendInlineContent(id = "star")
-            }
-
-            MdbListSource.TOMATOES, MdbListSource.POPCORN -> {
-                append("${value.toInt()}%")
-                if (value >= FRESH_THRESHOLD) {
-                    appendInlineContent(id = "fresh")
-                } else {
-                    appendInlineContent(id = "rotten")
-                }
-            }
-
-            MdbListSource.TMDB -> {
-                append("${value.toInt()}%")
-                appendInlineContent(id = "star")
-            }
-        }
-    }
+    return rating.value
+        ?: rating.score?.let { if (source == MdbListSource.IMDB) it / 10.0 else it }
 }
 
-/** Rotten Tomatoes calls 60% and above fresh, matching the existing critic rating */
-private const val FRESH_THRESHOLD = 60.0
+/** How a source writes its own numbers: IMDb and TMDB out of ten, Rotten Tomatoes as percentages */
+fun formatRating(
+    source: MdbListSource,
+    value: Double,
+): String =
+    when (source) {
+        MdbListSource.IMDB -> String.format(Locale.getDefault(), "%.1f", value)
+        MdbListSource.TMDB -> String.format(Locale.getDefault(), "%.1f", value / 10.0)
+        MdbListSource.TOMATOES, MdbListSource.POPCORN -> "${value.toInt()}%"
+    }
 
 /**
- * Extra ratings for an item, from the MDBList Ratings server plugin
+ * Ratings from the MDBList Ratings server plugin, on their own line
  *
- * Renders nothing at all when the plugin is not installed, when it has nothing cached for this
- * item, or when none of the sources are enabled, so a server without the plugin looks exactly as
- * it did before.
+ * Kept off the metadata line because four brand marks alongside year, runtime and age rating is
+ * more than that line can carry.
+ *
+ * Renders nothing at all when the plugin is absent, when it has nothing cached for this item, or
+ * when no sources are enabled, so a server without the plugin looks exactly as it did before.
  */
 @Composable
 fun MdbListRatings(
@@ -102,15 +88,35 @@ fun MdbListRatings(
     LaunchedEffect(itemId) {
         ratings = service.getRatings(itemId)
     }
-    val inlineContentMap = rememberQuickDetailsContentMap(textStyle)
-    ratings?.let { response ->
-        wanted.forEach { (source, _) ->
-            QuickDetailsText(
-                response.annotatedFor(source),
-                modifier,
-                textStyle,
-                inlineContentMap,
-            )
+    val response = ratings ?: return
+    val shown = wanted.mapNotNull { (source, _) -> response.valueFor(source)?.let { source to it } }
+    if (shown.isEmpty()) {
+        return
+    }
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        // Reserve the row's height even while loading, so the page does not jump when it arrives
+        modifier = modifier.heightIn(min = ICON_HEIGHT),
+    ) {
+        shown.forEach { (source, value) ->
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(5.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                AsyncImage(
+                    model = service.iconUrl(source, value),
+                    contentDescription = source.key,
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier.height(ICON_HEIGHT),
+                )
+                Text(
+                    text = formatRating(source, value),
+                    color = MaterialTheme.colorScheme.onSurface,
+                    style = textStyle,
+                    maxLines = 1,
+                )
+            }
         }
     }
 }
