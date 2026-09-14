@@ -677,6 +677,7 @@ fun SeriesDetailsHeader(
                 series.ui.quickDetails,
                 null,
                 Modifier.padding(start = HeaderUtils.startPadding),
+                itemId = series.id,
             )
             dto.studios?.let {
                 val studios = remember { series.studioNames }
