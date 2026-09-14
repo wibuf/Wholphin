@@ -3,7 +3,6 @@ package com.github.damontecres.wholphin.ui.components
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -35,8 +34,11 @@ private val SOURCE_TOGGLES =
         MdbListSource.TMDB to DisplayToggle.MDBLIST_TMDB,
     )
 
-/** Tall enough to read across a room without crowding the line it sits on */
-private val ICON_HEIGHT = 22.dp
+/** Sized to sit on the metadata line without pushing its height around */
+private val ICON_HEIGHT = 18.dp
+
+/** The same spacing and bullet the rest of the metadata line uses */
+private const val SEPARATOR = "  \u2022  "
 
 /**
  * The rating for a source in that source's own scale, or null when there is nothing to show
@@ -64,10 +66,10 @@ fun formatRating(
     }
 
 /**
- * Ratings from the MDBList Ratings server plugin, on their own line
+ * Ratings from the MDBList Ratings server plugin, continuing the metadata line
  *
- * Kept off the metadata line because four brand marks alongside year, runtime and age rating is
- * more than that line can carry.
+ * Emitted as children of the caller's Row so they sit alongside year, runtime and age rating,
+ * separated the same way, rather than forming a row of their own.
  *
  * Renders nothing at all when the plugin is absent, when it has nothing cached for this item, or
  * when no sources are enabled, so a server without the plugin looks exactly as it did before.
@@ -93,30 +95,31 @@ fun MdbListRatings(
     if (shown.isEmpty()) {
         return
     }
-    Row(
-        horizontalArrangement = Arrangement.spacedBy(16.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        // Reserve the row's height even while loading, so the page does not jump when it arrives
-        modifier = modifier.heightIn(min = ICON_HEIGHT),
-    ) {
-        shown.forEach { (source, value) ->
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(5.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                AsyncImage(
-                    model = service.iconUrl(source, value),
-                    contentDescription = source.key,
-                    contentScale = ContentScale.Fit,
-                    modifier = Modifier.height(ICON_HEIGHT),
-                )
-                Text(
-                    text = formatRating(source, value),
-                    color = MaterialTheme.colorScheme.onSurface,
-                    style = textStyle,
-                    maxLines = 1,
-                )
-            }
+    shown.forEach { (source, value) ->
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = modifier,
+        ) {
+            // Matches the separator the rest of the line uses
+            Text(
+                text = SEPARATOR,
+                color = MaterialTheme.colorScheme.onSurface,
+                style = textStyle,
+                maxLines = 1,
+            )
+            AsyncImage(
+                model = service.iconUrl(source, value),
+                contentDescription = source.key,
+                contentScale = ContentScale.Fit,
+                modifier = Modifier.height(ICON_HEIGHT),
+            )
+            Text(
+                text = formatRating(source, value),
+                color = MaterialTheme.colorScheme.onSurface,
+                style = textStyle,
+                maxLines = 1,
+            )
         }
     }
 }

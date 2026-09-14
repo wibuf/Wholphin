@@ -23,7 +23,10 @@ runs:
     - name: Setup Android SDK
       uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4
       with:
-        packages: "tools platform-tools build-tools;${{ env.BUILD_TOOLS_VERSION }} ndk;${{ env.NDK_VERSION }}"
+        # "tools" is the obsolete SDK package, superseded by cmdline-tools. Google has
+        # removed it from the repository, so asking for it now fails the whole setup with
+        # "Failed to find package 'tools'". Nothing in the build uses it.
+        packages: "platform-tools build-tools;${{ env.BUILD_TOOLS_VERSION }} ndk;${{ env.NDK_VERSION }}"
     - name: Add NDK to path
       shell: bash
       run: |

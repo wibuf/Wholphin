@@ -67,7 +67,6 @@ import com.github.damontecres.wholphin.ui.components.ExpandablePlayButton
 import com.github.damontecres.wholphin.ui.components.GenreText
 import com.github.damontecres.wholphin.ui.components.HeaderUtils
 import com.github.damontecres.wholphin.ui.components.LoadingPage
-import com.github.damontecres.wholphin.ui.components.MdbListRatings
 import com.github.damontecres.wholphin.ui.components.Optional
 import com.github.damontecres.wholphin.ui.components.OverviewText
 import com.github.damontecres.wholphin.ui.components.PersonContextActions
@@ -678,11 +677,7 @@ fun SeriesDetailsHeader(
                 series.ui.quickDetails,
                 null,
                 Modifier.padding(start = HeaderUtils.startPadding),
-            )
-
-            MdbListRatings(
-                series.id,
-                Modifier.padding(start = HeaderUtils.startPadding),
+                itemId = series.id,
             )
             dto.studios?.let {
                 val studios = remember { series.studioNames }

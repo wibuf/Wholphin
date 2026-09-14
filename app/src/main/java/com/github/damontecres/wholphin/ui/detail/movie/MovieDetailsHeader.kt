@@ -23,7 +23,6 @@ import com.github.damontecres.wholphin.data.model.BaseItem
 import com.github.damontecres.wholphin.preferences.UserPreferences
 import com.github.damontecres.wholphin.ui.components.GenreText
 import com.github.damontecres.wholphin.ui.components.HeaderUtils
-import com.github.damontecres.wholphin.ui.components.MdbListRatings
 import com.github.damontecres.wholphin.ui.components.OverviewText
 import com.github.damontecres.wholphin.ui.components.QuickDetails
 import com.github.damontecres.wholphin.ui.components.TitleOrLogo
@@ -68,11 +67,7 @@ fun MovieDetailsHeader(
                 movie.ui.quickDetails,
                 movie.timeRemainingOrRuntime,
                 Modifier.padding(start = HeaderUtils.startPadding),
-            )
-
-            MdbListRatings(
-                movie.id,
-                Modifier.padding(start = HeaderUtils.startPadding),
+                itemId = movie.id,
             )
 
             dto.genres?.letNotEmpty {

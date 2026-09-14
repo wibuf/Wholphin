@@ -30,6 +30,7 @@ import com.github.damontecres.wholphin.ui.formatTime
 import com.github.damontecres.wholphin.ui.util.LocalClock
 import com.github.damontecres.wholphin.ui.util.LocalInterfaceCustomization
 import org.jellyfin.sdk.model.DateTime
+import org.jellyfin.sdk.model.UUID
 import kotlin.time.Duration
 
 @Composable
@@ -39,6 +40,12 @@ fun QuickDetails(
     modifier: Modifier = Modifier,
     textStyle: TextStyle = MaterialTheme.typography.titleSmall,
     endsAt: DateTime? = null,
+    /**
+     * When set, ratings for this item are fetched from the MDBList Ratings server plugin and shown
+     * after the Jellyfin ones. Left null everywhere that renders a row or a list, so browsing never
+     * fires a request per card.
+     */
+    itemId: UUID? = null,
 ) {
     val enabled = LocalInterfaceCustomization.current.enabledDisplayToggles
     val inlineContentMap = rememberQuickDetailsContentMap(textStyle)
@@ -54,6 +61,7 @@ fun QuickDetails(
             if (DisplayToggle.CRITIC_RATING in enabled) {
                 QuickDetailsText(details.criticRating, Modifier, textStyle, inlineContentMap)
             }
+            MdbListRatings(itemId, textStyle = textStyle)
         }
         if (timeRemaining != null) {
             TimeRemaining(timeRemaining, textStyle = textStyle)
