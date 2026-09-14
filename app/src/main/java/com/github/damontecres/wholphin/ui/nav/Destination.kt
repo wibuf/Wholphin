@@ -145,6 +145,38 @@ sealed class Destination(
     @Serializable
     data object Favorites : Destination(false)
 
+    // Fork-only: retro games from the Moonbase server plugin
+
+    /** Browse a games library; null picks the first one the server has */
+    @Serializable
+    data class Games(
+        val libraryId: String? = null,
+    ) : Destination(false)
+
+    @Serializable
+    data class GameDetail(
+        val libraryId: String,
+        val gameId: String,
+    ) : Destination(false)
+
+    /**
+     * Native emulation of one game
+     *
+     * @param serverCore the server's system name for the game, which picks the libretro core
+     * @param startFresh skip loading the saved state from the server
+     */
+    @Serializable
+    data class GamePlayer(
+        val libraryId: String,
+        val gameId: String,
+        val serverCore: String,
+        val startFresh: Boolean = false,
+    ) : Destination(true)
+
+    /** Download manager for libretro cores */
+    @Serializable
+    data object GameCores : Destination(false)
+
     @Serializable
     data object Discover : Destination(false)
 

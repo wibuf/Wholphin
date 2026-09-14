@@ -138,6 +138,13 @@ class NavDrawerViewModel
                     )
                 }
 
+                NavDrawerItem.Games -> {
+                    setIndex(index)
+                    navigationManager.navigateToFromDrawer(
+                        Destination.Games(),
+                    )
+                }
+
                 is ServerNavDrawerItem -> {
                     setIndex(index)
                     navigationManager.navigateToFromDrawer(item.destination)
@@ -169,6 +176,7 @@ class NavDrawerViewModel
                             is ServerNavDrawerItem -> it.destination
                             is NavDrawerItem.Favorites -> Destination.Favorites
                             is NavDrawerItem.Discover -> Destination.Discover
+                            is NavDrawerItem.Games -> Destination.Games()
                             else -> null
                         }
                     }
@@ -242,6 +250,14 @@ sealed interface NavDrawerItem {
             get() = "a_discover"
 
         override fun name(context: Context): String = context.getString(R.string.discover)
+    }
+
+    /** Fork-only: retro games from the Moonbase server plugin */
+    object Games : NavDrawerItem {
+        override val id: String
+            get() = "a_games"
+
+        override fun name(context: Context): String = context.getString(R.string.games)
     }
 }
 
@@ -672,6 +688,10 @@ fun NavigationDrawerScope.NavItem(
 
                 NavDrawerItem.Discover -> {
                     R.string.fa_magnifying_glass_plus
+                }
+
+                NavDrawerItem.Games -> {
+                    R.string.fa_gamepad
                 }
 
                 is ServerNavDrawerItem -> {

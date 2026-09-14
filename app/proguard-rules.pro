@@ -1,6 +1,8 @@
 -keepattributes SourceFile,LineNumberTable
 
 -keep class com.github.damontecres.wholphin.mpv.MPVLib { *; }
+# The libretro JNI glue looks up the bridge's callbacks by name
+-keep class com.github.damontecres.wholphin.games.LibretroBridge { *; }
 
 -keep class * extends com.google.protobuf.GeneratedMessageLite { *; }
 -keepclassmembers class * extends com.google.protobuf.GeneratedMessageLite {

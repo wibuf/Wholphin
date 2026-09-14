@@ -8,6 +8,10 @@ import androidx.tv.material3.Text
 import com.github.damontecres.wholphin.data.filter.DefaultForGenresFilterOptions
 import com.github.damontecres.wholphin.data.filter.DefaultForStudiosFilterOptions
 import com.github.damontecres.wholphin.data.model.SeerrItemType
+import com.github.damontecres.wholphin.games.ui.GameCoresPage
+import com.github.damontecres.wholphin.games.ui.GameDetailPage
+import com.github.damontecres.wholphin.games.ui.GamePlayerPage
+import com.github.damontecres.wholphin.games.ui.GamesPage
 import com.github.damontecres.wholphin.preferences.PlayerBackend
 import com.github.damontecres.wholphin.preferences.UserPreferences
 import com.github.damontecres.wholphin.ui.components.ItemGrid
@@ -340,6 +344,25 @@ fun DestinationContent(
             SlideshowPage(
                 slideshow = destination,
             )
+        }
+
+        is Destination.Games -> {
+            LaunchedEffect(Unit) { onClearBackdrop.invoke() }
+            GamesPage(destination = destination, modifier = modifier)
+        }
+
+        is Destination.GameDetail -> {
+            LaunchedEffect(Unit) { onClearBackdrop.invoke() }
+            GameDetailPage(destination = destination, modifier = modifier)
+        }
+
+        is Destination.GamePlayer -> {
+            GamePlayerPage(destination = destination, modifier = modifier)
+        }
+
+        Destination.GameCores -> {
+            LaunchedEffect(Unit) { onClearBackdrop.invoke() }
+            GameCoresPage(modifier = modifier)
         }
 
         Destination.Favorites -> {

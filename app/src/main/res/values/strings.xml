@@ -381,6 +381,24 @@
     <string name="mpv_boost_dialogue_summary">Downmix surround to stereo with the centre channel raised, so speech stays above the rest of the mix on TV speakers</string>
     <string name="mpv_compress_loud_scenes">Even out loud scenes</string>
     <string name="mpv_compress_loud_scenes_summary">Reduce the gap between quiet dialogue and loud action, so you do not have to keep changing the volume</string>
+    <!-- Fork-only: retro games via the Moonbase server plugin -->
+    <string name="games">Games</string>
+    <string name="no_games_found">No games found</string>
+    <string name="emulator_cores">Emulator cores</string>
+    <string name="emulator_cores_summary">Cores are downloaded from the libretro buildbot. Select a system to install or remove its core.</string>
+    <string name="game_start_fresh">Start fresh</string>
+    <string name="game_download_core">Download %1$s core (~%2$d MB)</string>
+    <string name="game_core_downloading">Downloading %1$s core… %2$d%%</string>
+    <string name="game_core_row_downloading">Downloading… %1$d%%</string>
+    <string name="game_core_installed">Installed</string>
+    <string name="game_core_not_installed">Not installed (~%1$d MB)</string>
+    <string name="game_core_unavailable">No core build for this device</string>
+    <string name="game_system_unsupported">This system (%1$s) is not supported yet</string>
+    <string name="game_developer">Developer</string>
+    <string name="game_publisher">Publisher</string>
+    <string name="game_franchise">Franchise</string>
+    <string name="game_file">File</string>
+    <string name="game_bios">BIOS</string>
     <string name="mdblist_imdb" translatable="false">IMDb</string>
     <string name="mdblist_tomatoes" translatable="false">Rotten Tomatoes</string>
     <string name="mdblist_popcorn" translatable="false">Rotten Tomatoes audience</string>

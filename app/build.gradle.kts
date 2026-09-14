@@ -178,6 +178,17 @@ configure<ApplicationExtension> {
         compose = true
     }
 
+    // Native retro-game playback (app/src/main/cpp). CI installs the NDK it names in
+    // NDK_VERSION; a local build falls back to the version the checked-in code was
+    // ported against.
+    ndkVersion = providers.environmentVariable("NDK_VERSION").orElse("28.2.13676358").get()
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
+            version = "3.22.1"
+        }
+    }
+
     splits {
         abi {
             // Disable split abis when building bundles

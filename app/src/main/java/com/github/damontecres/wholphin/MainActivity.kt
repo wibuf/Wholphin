@@ -4,7 +4,10 @@ import android.content.Context
 import android.content.Intent
 import android.content.res.Configuration
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.view.KeyEvent
+import android.view.MotionEvent
 import android.view.WindowManager
 import android.widget.Toast
 import androidx.activity.compose.setContent
@@ -31,6 +34,8 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
 import com.github.damontecres.wholphin.data.ServerRepository
+import com.github.damontecres.wholphin.games.LibretroBridge
+import com.github.damontecres.wholphin.games.input.NativePadInput
 import com.github.damontecres.wholphin.preferences.AppPreferences
 import com.github.damontecres.wholphin.preferences.PlayerBackend
 import com.github.damontecres.wholphin.services.AppUpgradeHandler
@@ -123,6 +128,13 @@ class MainActivity : AppCompatActivity() {
 
     @Inject
     lateinit var mdbListRatingsService: MdbListRatingsService
+
+    @Inject
+    lateinit var libretroBridge: LibretroBridge
+
+    // Routes gamepad input straight to the native emulator while a game runs. Nullable rather
+    // than lateinit since dispatchKeyEvent can run before onCreate wires it.
+    private var nativePad: NativePadInput? = null
 
     @Inject
     lateinit var refreshRateService: RefreshRateService
@@ -234,6 +246,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         viewModel.appStart(intent)
+        setupGameInput()
         setContent {
             MaterialTheme(colorScheme = PurpleThemeColors.darkScheme) {
                 Surface(Modifier.fillMaxSize()) {
@@ -302,13 +315,88 @@ class MainActivity : AppCompatActivity() {
             return true
         } else {
             screensaverService.pulse()
+            if (dispatchGameKeyEvent(event)) return true
             return super.dispatchKeyEvent(event)
         }
+    }
+
+    override fun dispatchGenericMotionEvent(event: MotionEvent): Boolean {
+        val pad = nativePad
+        if (pad != null && pad.active && !libretroBridge.overlayOpen && pad.onMotion(event)) return true
+        return super.dispatchGenericMotionEvent(event)
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (!hasFocus) nativePad?.releaseHeldInput()
+    }
+
+    /**
+     * Native game sessions own the pad end-to-end: while a game runs, gamepad and d-pad events
+     * go straight to the emulator and never reach Compose. Back is the one exception, which the
+     * player page turns into the pause menu.
+     *
+     * The pause menu itself is Compose, so while it is open the pad is translated into the keys
+     * Compose navigates with instead.
+     */
+    private fun dispatchGameKeyEvent(event: KeyEvent): Boolean {
+        val pad = nativePad ?: return false
+        if (!pad.active) return false
+        if (!libretroBridge.overlayOpen) return pad.onKey(event)
+        val mapped =
+            when (event.keyCode) {
+                KeyEvent.KEYCODE_BUTTON_A -> {
+                    KeyEvent.KEYCODE_DPAD_CENTER
+                }
+
+                KeyEvent.KEYCODE_BUTTON_B -> {
+                    KeyEvent.KEYCODE_BACK
+                }
+
+                KeyEvent.KEYCODE_BUTTON_START,
+                KeyEvent.KEYCODE_BUTTON_MODE,
+                KeyEvent.KEYCODE_MENU,
+                -> {
+                    if (event.action == KeyEvent.ACTION_DOWN) libretroBridge.onMenu()
+                    return true
+                }
+
+                else -> {
+                    return false
+                }
+            }
+        return super.dispatchKeyEvent(
+            KeyEvent(event.downTime, event.eventTime, event.action, mapped, event.repeatCount),
+        )
+    }
+
+    private fun setupGameInput() {
+        libretroBridge.onActiveChanged = { active -> nativePad?.setActive(active) }
+        libretroBridge.onBeforeResume = { nativePad?.releaseHeldInput() }
+        libretroBridge.onControllerTypeChanged = { nativePad?.onControllerTypeChanged() }
+        nativePad =
+            NativePadInput(
+                libretroBridge,
+                Handler(Looper.getMainLooper()),
+                this,
+                object : NativePadInput.Callbacks {
+                    // Controller remapping and diagnostics UI are not ported yet
+                    override fun onControllerMappingKey(
+                        keyCode: Int,
+                        device: Map<String, Any?>,
+                    ) {}
+
+                    override fun onControllerDiagnosticsAxes(payload: Map<String, Any?>) {}
+
+                    override fun onControllerDiagnosticsButton(payload: Map<String, Any?>) {}
+                },
+            )
     }
 
     override fun onResume() {
         super.onResume()
         Timber.d("onResume")
+        libretroBridge.onHostResume()
         viewModel.appResume()
         lifecycleScope.launchDefault {
             screensaverService.pulse()
@@ -337,6 +425,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onPause() {
+        // Drop buttons physically held as the app goes away, so they cannot fire on resume, and
+        // stop emulating while nobody is watching
+        nativePad?.releaseHeldInput()
+        libretroBridge.onHostPause()
         super.onPause()
         Timber.d("onPause")
     }
@@ -384,6 +476,11 @@ class MainActivity : AppCompatActivity() {
     override fun onDestroy() {
         super.onDestroy()
         Timber.d("onDestroy")
+        // A running session must not be abandoned if the activity is destroyed while the process
+        // survives, and the pad's process-wide input listener has to go with the activity
+        libretroBridge.stop()
+        nativePad?.dispose()
+        nativePad = null
     }
 
     override fun onConfigurationChanged(newConfig: Configuration) {
