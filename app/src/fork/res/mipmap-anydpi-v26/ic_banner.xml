@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Fork builds only (-PforkBuild).
+
+    Upstream's ic_banner is an <adaptive-icon> that insets its foreground by 18% over a
+    solid colour. That is fine for artwork drawn to be inset, but it would shrink the
+    fork's banner inside a dark border instead of filling the tile.
+
+    This file shadows upstream's on API 26+, where the anydpi-v26 version wins over the
+    density buckets, so without it the PNG beside this would simply never be used.
+-->
+<bitmap xmlns:android="http://schemas.android.com/apk/res/android"
+    android:src="@mipmap/ic_banner_fork"
+    android:gravity="fill" />
