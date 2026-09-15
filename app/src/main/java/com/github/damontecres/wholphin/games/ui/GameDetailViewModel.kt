@@ -28,9 +28,6 @@ data class GameDetailState(
     val core: GameCore? = null,
     val coreInstalled: Boolean = false,
     val coreAvailable: Boolean = false,
-    /** 0..1 while the core downloads */
-    val downloadProgress: Float? = null,
-    val downloadError: String? = null,
 )
 
 @HiltViewModel(assistedFactory = GameDetailViewModel.Factory::class)
@@ -90,22 +87,5 @@ class GameDetailViewModel
                     startFresh = startFresh,
                 ),
             )
-        }
-
-        fun downloadCore() {
-            val core = state.value.core ?: return
-            if (state.value.downloadProgress != null) return
-            _state.update { it.copy(downloadProgress = 0f, downloadError = null) }
-            viewModelScope.launch {
-                try {
-                    cores.download(core) { progress -> _state.update { it.copy(downloadProgress = progress) } }
-                    _state.update { it.copy(downloadProgress = null, coreInstalled = true) }
-                } catch (ex: CancellationException) {
-                    throw ex
-                } catch (ex: Exception) {
-                    Timber.e(ex, "Could not download core %s", core.coreId)
-                    _state.update { it.copy(downloadProgress = null, downloadError = ex.message ?: "Download failed") }
-                }
-            }
         }
     }

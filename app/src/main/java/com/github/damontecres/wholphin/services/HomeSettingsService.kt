@@ -11,6 +11,8 @@ import com.github.damontecres.wholphin.data.model.HomeRowViewOptions
 import com.github.damontecres.wholphin.data.model.SUPPORTED_HOME_PAGE_SETTINGS_VERSION
 import com.github.damontecres.wholphin.data.model.createGenreDestination
 import com.github.damontecres.wholphin.data.model.createStudioDestination
+import com.github.damontecres.wholphin.games.GameRecencyStore
+import com.github.damontecres.wholphin.games.MoonbaseGamesService
 import com.github.damontecres.wholphin.preferences.DefaultUserConfiguration
 import com.github.damontecres.wholphin.preferences.HomePagePreferences
 import com.github.damontecres.wholphin.ui.AspectRatio
@@ -97,6 +99,8 @@ class HomeSettingsService
         private val imageUrlService: ImageUrlService,
         private val suggestionService: SuggestionService,
         private val displayPreferencesService: DisplayPreferencesService,
+        private val moonbaseGamesService: MoonbaseGamesService,
+        private val gameRecencyStore: GameRecencyStore,
     ) {
         @OptIn(ExperimentalSerializationApi::class)
         val jsonParser =
@@ -311,7 +315,16 @@ class HomeSettingsService
                         config = HomeRowConfig.ContinueWatchingCombined(),
                     ),
                 )
-            val rowConfig = continueWatchingRow + includedIds
+            // Fork-only: a row per Moonbase games library, after the Jellyfin ones
+            val gameRows =
+                moonbaseGamesService.libraries().mapIndexed { index, library ->
+                    HomeRowConfigDisplay(
+                        id = includedIds.size + 2 + index,
+                        title = ResArgStringProvider(R.string.recently_added_in, library.name),
+                        config = HomeRowConfig.Games(library.id, library.name),
+                    )
+                }
+            val rowConfig = continueWatchingRow + includedIds + gameRows
             return HomePageResolvedSettings(rowConfig)
         }
 
@@ -489,6 +502,14 @@ class HomeSettingsService
                     HomeRowConfigDisplay(id, StringStringProvider(config.name), config)
                 }
 
+                is HomeRowConfig.Games -> {
+                    HomeRowConfigDisplay(
+                        id,
+                        ResArgStringProvider(R.string.recently_added_in, config.name),
+                        config,
+                    )
+                }
+
                 is HomeRowConfig.NextUp -> {
                     HomeRowConfigDisplay(
                         id,
@@ -595,6 +616,17 @@ class HomeSettingsService
             usePaging: Boolean = false,
         ): HomeRowLoadingState =
             when (row) {
+                is HomeRowConfig.Games -> {
+                    val games = gameRecencyStore.newestFirst(moonbaseGamesService.games(row.libraryId))
+                    HomeRowLoadingState.Games(
+                        title = ResArgStringProvider(R.string.recently_added_in, row.name),
+                        libraryId = row.libraryId,
+                        games = games.take(limit),
+                        viewOptions = row.viewOptions,
+                        showViewMore = games.size > limit,
+                    )
+                }
+
                 is HomeRowConfig.ContinueWatching -> {
                     val resume =
                         latestNextUpService.getResume(

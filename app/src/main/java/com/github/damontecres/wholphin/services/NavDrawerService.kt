@@ -155,9 +155,13 @@ class NavDrawerService
                 } else {
                     emptySet()
                 }
+            // Moonbase needs a Jellyfin library pointed at the ROM folders, but that library is
+            // empty as far as Jellyfin is concerned: the Games entry is how it is browsed
+            val gameLibraryIds = moonbaseGamesService.libraries().map { it.id.toGameLibraryKey() }.toSet()
             val libraries =
                 userViews
                     .filter { it.collectionType in supportedCollectionTypes || it.id in recordingFolders }
+                    .filterNot { it.id.toString().toGameLibraryKey() in gameLibraryIds }
                     .map {
                         Library(
                             itemId = it.id,
@@ -200,10 +204,9 @@ class NavDrawerService
                     add(NavDrawerItem.Favorites)
                     if (discoverActive) add(NavDrawerItem.Discover)
                     // Only servers running the Moonbase plugin with a games library answer here
-                    val hasGames =
-                        withTimeoutOrNull(5.seconds) { moonbaseGamesService.libraries(refresh = true) }
-                            ?.isNotEmpty() == true
-                    if (hasGames) add(NavDrawerItem.Games)
+                    withTimeoutOrNull(5.seconds) { moonbaseGamesService.libraries(refresh = true) }
+                        ?.firstOrNull()
+                        ?.let { add(NavDrawerItem.Games(it.id, it.name)) }
                 }
             val allLibraries = getAllUserLibraries(user.id, userDto.tvAccess)
             val libraries =
@@ -259,6 +262,9 @@ class NavDrawerService
             }
         }
     }
+
+/** Moonbase reports library ids without dashes; Jellyfin's SDK formats them with */
+private fun String.toGameLibraryKey(): String = replace("-", "").lowercase()
 
 data class NavDrawerItemState(
     val items: List<NavDrawerItem> = emptyList(),

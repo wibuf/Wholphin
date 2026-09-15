@@ -11,11 +11,13 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -234,7 +236,7 @@ private fun PauseMenu(
                     LaunchedEffect(Unit) { focusRequester.tryRequestFocus() }
                     LazyColumn(
                         verticalArrangement = Arrangement.spacedBy(4.dp),
-                        modifier = Modifier.fillMaxHeight(0.7f),
+                        modifier = Modifier.heightIn(max = 380.dp),
                     ) {
                         items(state.options, key = { it.id }) { option ->
                             val first = option.id == state.options.firstOrNull()?.id
@@ -263,20 +265,22 @@ private fun PauseMenu(
                         style = MaterialTheme.typography.titleLarge,
                         modifier = Modifier.padding(bottom = 8.dp),
                     )
+                    // Exit sits near the top: on a TV the list is taller than the screen, and
+                    // the way out must not be the one entry that needs scrolling to
                     val actions =
                         listOf(
                             MenuAction("Resume") { viewModel.closeOverlay() },
-                            MenuAction("Press Start") { viewModel.pressButton(LibretroBridge.RETRO_START) },
-                            MenuAction("Press Select") { viewModel.pressButton(LibretroBridge.RETRO_SELECT) },
                             MenuAction("Save state") { viewModel.saveState() },
                             MenuAction("Load state") { viewModel.loadState() },
+                            MenuAction("Exit") { viewModel.requestExit() },
+                            MenuAction("Press Start") { viewModel.pressButton(LibretroBridge.RETRO_START) },
+                            MenuAction("Press Select") { viewModel.pressButton(LibretroBridge.RETRO_SELECT) },
                             MenuAction(if (state.fastForward) "Fast-forward: On" else "Fast-forward: Off") {
                                 viewModel.toggleFastForward()
                             },
                             MenuAction("Restart") { viewModel.restart() },
                             MenuAction("Emulator settings") { viewModel.openSettings() },
                             MenuAction("Reset emulator settings") { viewModel.resetSettings() },
-                            MenuAction("Exit") { viewModel.requestExit() },
                         )
                     MenuList(actions, focusRequester)
                 }
@@ -291,8 +295,11 @@ private fun MenuList(
     focusRequester: FocusRequester,
 ) {
     LaunchedEffect(actions.size) { focusRequester.tryRequestFocus() }
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
-        actions.forEachIndexed { index, action ->
+    LazyColumn(
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+        modifier = Modifier.fillMaxWidth().heightIn(max = 380.dp),
+    ) {
+        itemsIndexed(actions) { index, action ->
             ListItem(
                 selected = false,
                 onClick = action.onClick,

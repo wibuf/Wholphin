@@ -114,7 +114,8 @@ fun GameDetailPage(
                                 )
                             }
 
-                            state.coreInstalled -> {
+                            // The player fetches a missing core itself, so Play is all there is
+                            state.coreInstalled || state.coreAvailable -> {
                                 Button(
                                     onClick = { viewModel.play(startFresh = false) },
                                     modifier = Modifier.focusRequester(focusRequester),
@@ -126,27 +127,6 @@ fun GameDetailPage(
                                 }
                             }
 
-                            state.downloadProgress != null -> {
-                                Text(
-                                    text =
-                                        stringResource(
-                                            R.string.game_core_downloading,
-                                            core.systemName,
-                                            (state.downloadProgress!! * 100).toInt(),
-                                        ),
-                                    color = MaterialTheme.colorScheme.onBackground,
-                                )
-                            }
-
-                            state.coreAvailable -> {
-                                Button(
-                                    onClick = viewModel::downloadCore,
-                                    modifier = Modifier.focusRequester(focusRequester),
-                                ) {
-                                    Text(stringResource(R.string.game_download_core, core.systemName, core.approxSizeMb))
-                                }
-                            }
-
                             else -> {
                                 Text(
                                     text = stringResource(R.string.game_core_unavailable),
@@ -155,10 +135,6 @@ fun GameDetailPage(
                             }
                         }
                     }
-                    state.downloadError?.let {
-                        Text(text = it, color = MaterialTheme.colorScheme.error)
-                    }
-
                     detail.overview?.takeIf { it.isNotBlank() }?.let {
                         Text(
                             text = it,

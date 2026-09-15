@@ -146,6 +146,8 @@ fun HomeSettingsPage(
                                     libraries = state.libraries,
                                     showDiscover = discoverEnabled,
                                     onClick = { backStack.add(ChooseRowType(it)) },
+                                    gameLibraries = state.gameLibraries,
+                                    onClickGames = { library -> addRow { viewModel.addGamesRow(library) } },
                                     onClickMeta = {
                                         when (it) {
                                             MetaRowType.CONTINUE_WATCHING,

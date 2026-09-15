@@ -255,6 +255,9 @@ fun HomeRowGrid(
                 LoadingPage(Modifier.fillMaxSize())
             }
 
+            // Games rows open the Games page instead of this grid
+            is HomeRowLoadingState.Games -> {}
+
             is HomeRowLoadingState.Success -> {
                 when (destination.config) {
                     is HomeRowConfig.Genres -> {

@@ -52,7 +52,7 @@ sealed interface HomeRowLoadingState {
     val title: StringProvider
 
     val completed: Boolean
-        get() = this is Success || this is Error
+        get() = this is Success || this is Games || this is Error
 
     data class Pending(
         override val title: StringProvider,
@@ -67,6 +67,18 @@ sealed interface HomeRowLoadingState {
         val items: List<BaseItem?>,
         val viewOptions: HomeRowViewOptions = HomeRowViewOptions(),
         val rowType: HomeRowConfig? = null,
+        val showViewMore: Boolean = true,
+    ) : HomeRowLoadingState
+
+    /**
+     * Fork-only: a row of Moonbase games, which are not Jellyfin items and so cannot ride in
+     * [Success]
+     */
+    data class Games(
+        override val title: StringProvider,
+        val libraryId: String,
+        val games: List<com.github.damontecres.wholphin.games.model.GameSummary>,
+        val viewOptions: HomeRowViewOptions = HomeRowViewOptions(),
         val showViewMore: Boolean = true,
     ) : HomeRowLoadingState
 

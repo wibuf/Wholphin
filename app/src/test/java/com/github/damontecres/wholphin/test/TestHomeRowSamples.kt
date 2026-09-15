@@ -77,6 +77,7 @@ class TestHomeRowSamples {
                 HomeRowConfig.TvPrograms(),
                 HomeRowConfig.TvChannels(),
                 HomeRowConfig.Suggestions(parentId = UUID.randomUUID()),
+                HomeRowConfig.Games(libraryId = "abc", name = "Video Games"),
             )
     }
 
@@ -100,6 +101,7 @@ class TestHomeRowSamples {
                 is HomeRowConfig.Suggestions -> foundTypes.add(it::class)
                 is HomeRowConfig.TvChannels -> foundTypes.add(it::class)
                 is HomeRowConfig.Studios -> foundTypes.add(it::class)
+                is HomeRowConfig.Games -> foundTypes.add(it::class)
             }
         }
         Assert.assertEquals(HomeRowConfig::class.sealedSubclasses.size, foundTypes.size)
@@ -132,6 +134,8 @@ class TestHomeRowSamples {
                 imageUrlService = mockk(),
                 suggestionService = mockk(),
                 displayPreferencesService = mockk(),
+                moonbaseGamesService = mockk(),
+                gameRecencyStore = mockk(),
             )
 
         val str = """{

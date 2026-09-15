@@ -108,3 +108,19 @@ class GamesViewModel
 
         fun openCores() = navigationManager.navigateTo(Destination.GameCores)
     }
+
+/** The home page's games row only needs to open things */
+@HiltViewModel
+class GamesRowViewModel
+    @Inject
+    constructor(
+        val games: MoonbaseGamesService,
+        private val navigationManager: NavigationManager,
+    ) : ViewModel() {
+        fun open(
+            libraryId: String,
+            game: GameSummary,
+        ) = navigationManager.navigateTo(Destination.GameDetail(libraryId, game.id))
+
+        fun openLibrary(libraryId: String) = navigationManager.navigateTo(Destination.Games(libraryId))
+    }

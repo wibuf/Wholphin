@@ -13,9 +13,10 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.itemsIndexed
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -25,11 +26,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.focusRestorer
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.tv.material3.Card
@@ -44,11 +48,14 @@ import com.github.damontecres.wholphin.games.MoonbaseGamesService
 import com.github.damontecres.wholphin.games.model.GameSummary
 import com.github.damontecres.wholphin.ui.AspectRatios
 import com.github.damontecres.wholphin.ui.OneTimeLaunchedEffect
+import com.github.damontecres.wholphin.ui.cards.ItemRow
+import com.github.damontecres.wholphin.ui.cards.ViewMoreCard
 import com.github.damontecres.wholphin.ui.components.Button
 import com.github.damontecres.wholphin.ui.components.ErrorMessage
 import com.github.damontecres.wholphin.ui.components.LoadingPage
 import com.github.damontecres.wholphin.ui.enableMarquee
 import com.github.damontecres.wholphin.ui.tryRequestFocus
+import com.github.damontecres.wholphin.util.HomeRowLoadingState
 import com.github.damontecres.wholphin.util.LoadingState
 
 @Composable
@@ -93,14 +100,22 @@ fun GamesPage(
                     }
                     return@Column
                 }
+                // Coming back up from the grid lands on the tab that was selected, not the first
+                // one, and the page opens with the tab row focused so the grid never steals it
+                val tabFocusRequesters = remember(state.systems) { List(state.systems.size) { FocusRequester() } }
+                LaunchedEffect(Unit) { tabFocusRequesters.firstOrNull()?.tryRequestFocus() }
                 TabRow(
                     selectedTabIndex = state.selectedSystem,
-                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
+                    modifier =
+                        Modifier
+                            .padding(horizontal = 24.dp, vertical = 8.dp)
+                            .focusRestorer(tabFocusRequesters[state.selectedSystem.coerceIn(tabFocusRequesters.indices)]),
                 ) {
                     state.systems.forEachIndexed { index, system ->
                         Tab(
                             selected = index == state.selectedSystem,
                             onFocus = { viewModel.selectSystem(index) },
+                            modifier = Modifier.focusRequester(tabFocusRequesters[index]),
                         ) {
                             Text(
                                 text = "${system.name} (${system.gameCount})",
@@ -135,24 +150,66 @@ private fun GameGrid(
     onClick: (GameSummary) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val firstFocus = remember { FocusRequester() }
     LazyVerticalGrid(
         columns = GridCells.Fixed(6),
         horizontalArrangement = Arrangement.spacedBy(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
         contentPadding = PaddingValues(horizontal = 24.dp, vertical = 16.dp),
-        modifier = modifier,
+        modifier = modifier.focusRestorer(),
     ) {
-        itemsIndexed(games, key = { _, game -> game.id }) { index, game ->
+        items(games, key = { it.id }) { game ->
             GameCard(
                 title = game.title,
                 imageUrl = gamesService.thumbUrl(libraryId, game.id),
                 onClick = { onClick(game) },
-                modifier = if (index == 0) Modifier.focusRequester(firstFocus) else Modifier,
             )
         }
     }
-    LaunchedEffect(games) { if (games.isNotEmpty()) firstFocus.tryRequestFocus() }
+}
+
+/**
+ * A games row for the home page: box art at the row's height, newest first
+ */
+@Composable
+fun GamesHomeRow(
+    row: HomeRowLoadingState.Games,
+    onFocusPosition: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+    viewModel: GamesRowViewModel = hiltViewModel(),
+) {
+    val height = row.viewOptions.heightDp.dp
+    ItemRow(
+        title = row.title.getString(),
+        items = row.games,
+        onClickItem = { _, game -> viewModel.open(row.libraryId, game) },
+        onLongClickItem = { _, _ -> },
+        modifier = modifier,
+        horizontalPadding = row.viewOptions.spacing.dp,
+        cardContent = { index, game, cardModifier, onClick, _ ->
+            if (game != null) {
+                GameCard(
+                    title = game.title,
+                    imageUrl = viewModel.games.thumbUrl(row.libraryId, game.id),
+                    onClick = onClick,
+                    showTitle = row.viewOptions.showTitles,
+                    modifier =
+                        cardModifier
+                            .width(height * AspectRatios.TALL)
+                            .onFocusChanged { if (it.isFocused) onFocusPosition(index) },
+                )
+            }
+        },
+        showViewMore = row.showViewMore,
+        viewMoreCardContent = { mod ->
+            ViewMoreCard(
+                onClick = { viewModel.openLibrary(row.libraryId) },
+                onLongClick = {},
+                size = DpSize(width = height * AspectRatios.TALL, height = height),
+                showTitle = row.viewOptions.showTitles,
+                modifier = mod,
+            )
+        },
+    )
 }
 
 /** Box art with the title under it, in the shape of the library grid cards */
@@ -162,6 +219,7 @@ fun GameCard(
     imageUrl: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    showTitle: Boolean = true,
     interactionSource: MutableInteractionSource = remember { MutableInteractionSource() },
 ) {
     val focused by interactionSource.collectIsFocusedAsState()
@@ -186,20 +244,22 @@ fun GameCard(
                         .background(MaterialTheme.colorScheme.surfaceVariant),
             )
         }
-        Text(
-            text = title,
-            maxLines = 1,
-            textAlign = TextAlign.Center,
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.SemiBold,
-            overflow = TextOverflow.Ellipsis,
-            color = MaterialTheme.colorScheme.onBackground,
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 4.dp)
-                    .enableMarquee(focused),
-        )
-        Spacer(Modifier.padding(2.dp))
+        if (showTitle) {
+            Text(
+                text = title,
+                maxLines = 1,
+                textAlign = TextAlign.Center,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold,
+                overflow = TextOverflow.Ellipsis,
+                color = MaterialTheme.colorScheme.onBackground,
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 4.dp)
+                        .enableMarquee(focused),
+            )
+            Spacer(Modifier.padding(2.dp))
+        }
     }
 }

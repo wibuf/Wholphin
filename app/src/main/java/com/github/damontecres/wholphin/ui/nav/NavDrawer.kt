@@ -138,10 +138,10 @@ class NavDrawerViewModel
                     )
                 }
 
-                NavDrawerItem.Games -> {
+                is NavDrawerItem.Games -> {
                     setIndex(index)
                     navigationManager.navigateToFromDrawer(
-                        Destination.Games(),
+                        Destination.Games(item.libraryId),
                     )
                 }
 
@@ -176,7 +176,7 @@ class NavDrawerViewModel
                             is ServerNavDrawerItem -> it.destination
                             is NavDrawerItem.Favorites -> Destination.Favorites
                             is NavDrawerItem.Discover -> Destination.Discover
-                            is NavDrawerItem.Games -> Destination.Games()
+                            is NavDrawerItem.Games -> Destination.Games(it.libraryId)
                             else -> null
                         }
                     }
@@ -252,12 +252,20 @@ sealed interface NavDrawerItem {
         override fun name(context: Context): String = context.getString(R.string.discover)
     }
 
-    /** Fork-only: retro games from the Moonbase server plugin */
-    object Games : NavDrawerItem {
+    /**
+     * Fork-only: retro games from the Moonbase server plugin
+     *
+     * Carries the Moonbase library it opens, so the entry can take that library's name and the
+     * Jellyfin view behind it can be hidden without the two showing side by side.
+     */
+    data class Games(
+        val libraryId: String,
+        val libraryName: String,
+    ) : NavDrawerItem {
         override val id: String
             get() = "a_games"
 
-        override fun name(context: Context): String = context.getString(R.string.games)
+        override fun name(context: Context): String = libraryName.ifBlank { context.getString(R.string.games) }
     }
 }
 
@@ -690,7 +698,7 @@ fun NavigationDrawerScope.NavItem(
                     R.string.fa_magnifying_glass_plus
                 }
 
-                NavDrawerItem.Games -> {
+                is NavDrawerItem.Games -> {
                     R.string.fa_gamepad
                 }
 

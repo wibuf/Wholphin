@@ -135,11 +135,20 @@ class GamePlayerViewModel
                 return
             }
             try {
-                val corePath = cores.installedCorePath(core.coreId)
-                if (corePath == null) {
-                    fail("The ${core.systemName} core is not installed.")
-                    return
-                }
+                // Cores are a few megabytes, so a missing one is fetched here rather than
+                // making the user find a download button first
+                val corePath =
+                    cores.installedCorePath(core.coreId) ?: run {
+                        if (!cores.isAvailable(core)) {
+                            fail("There is no ${core.systemName} core build for this device.")
+                            return
+                        }
+                        cores.download(core) { setLoading("Downloading ${core.systemName} core", it) }
+                        cores.installedCorePath(core.coreId) ?: run {
+                            fail("The ${core.systemName} core could not be installed.")
+                            return
+                        }
+                    }
                 val detail = games.game(destination.libraryId, destination.gameId)
                 if (detail == null) {
                     fail("Game not found.")

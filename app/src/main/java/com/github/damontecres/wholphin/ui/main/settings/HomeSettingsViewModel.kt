@@ -22,6 +22,8 @@ import com.github.damontecres.wholphin.data.model.HomeRowConfig.TvChannels
 import com.github.damontecres.wholphin.data.model.HomeRowConfig.TvPrograms
 import com.github.damontecres.wholphin.data.model.HomeRowViewOptions
 import com.github.damontecres.wholphin.data.model.SUPPORTED_HOME_PAGE_SETTINGS_VERSION
+import com.github.damontecres.wholphin.games.MoonbaseGamesService
+import com.github.damontecres.wholphin.games.model.GameLibrary
 import com.github.damontecres.wholphin.preferences.AppPreferences
 import com.github.damontecres.wholphin.services.BackdropService
 import com.github.damontecres.wholphin.services.HomePageResolvedSettings
@@ -83,6 +85,7 @@ class HomeSettingsViewModel
         private val seerrServerRepository: SeerrServerRepository,
         val preferencesDataStore: DataStore<AppPreferences>,
         @param:IoCoroutineScope private val ioScope: CoroutineScope,
+        private val moonbaseGamesService: MoonbaseGamesService,
     ) : ViewModel() {
         private val _state = MutableStateFlow(HomePageSettingsState.EMPTY)
         val state: StateFlow<HomePageSettingsState> = _state
@@ -108,6 +111,7 @@ class HomeSettingsViewModel
                 _state.update {
                     it.copy(
                         libraries = libraries,
+                        gameLibraries = moonbaseGamesService.libraries(),
                         rows = currentSettings.rows,
                     )
                 }
@@ -220,6 +224,24 @@ class HomeSettingsViewModel
                 }
             }
         }
+
+        /** Fork-only: a newest-first row for a Moonbase games library */
+        fun addGamesRow(library: GameLibrary): Job =
+            viewModelScope.launchIO {
+                val newRow =
+                    HomeRowConfigDisplay(
+                        id = idCounter++,
+                        title = ResArgStringProvider(R.string.recently_added_in, library.name),
+                        config = HomeRowConfig.Games(library.id, library.name),
+                    )
+                updateState {
+                    it.copy(
+                        loading = LoadingState.Loading,
+                        rows = it.rows.toMutableList().apply { add(newRow) },
+                    )
+                }
+                fetchRowData()
+            }
 
         fun addRow(type: MetaRowType): Job =
             viewModelScope.launchIO {
@@ -713,6 +735,10 @@ class HomeSettingsViewModel
                                     it.config
                                 }
 
+                                is HomeRowConfig.Games -> {
+                                    it.config
+                                }
+
                                 is RecentlyAdded -> {
                                     val collectionType = getCollectionType(it.config.parentId)
                                     val viewOptions = preset.getByCollectionType(collectionType)
@@ -864,6 +890,7 @@ data class HomePageSettingsState(
     val rows: List<HomeRowConfigDisplay>,
     val rowData: List<HomeRowLoadingState>,
     val libraries: List<Library>,
+    val gameLibraries: List<GameLibrary> = emptyList(),
 ) {
     companion object {
         val EMPTY =

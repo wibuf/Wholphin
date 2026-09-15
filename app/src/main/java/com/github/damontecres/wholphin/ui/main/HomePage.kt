@@ -52,6 +52,7 @@ import com.github.damontecres.wholphin.data.model.BaseItem
 import com.github.damontecres.wholphin.data.model.HomeRowConfig
 import com.github.damontecres.wholphin.data.model.HomeRowViewOptions
 import com.github.damontecres.wholphin.data.model.QuickDetailsData
+import com.github.damontecres.wholphin.games.ui.GamesHomeRow
 import com.github.damontecres.wholphin.preferences.UserPreferences
 import com.github.damontecres.wholphin.ui.Cards
 import com.github.damontecres.wholphin.ui.cards.BannerCard
@@ -399,6 +400,26 @@ fun HomePageContent(
                                         isError = true,
                                         modifier = rowModifier,
                                     )
+                                }
+
+                                is HomeRowLoadingState.Games -> {
+                                    if (r.games.isNotEmpty()) {
+                                        GamesHomeRow(
+                                            row = r,
+                                            onFocusPosition = { column -> currentOnFocusPosition(RowColumn(rowIndex, column)) },
+                                            modifier =
+                                                rowModifier
+                                                    .fillMaxWidth()
+                                                    .focusGroup()
+                                                    .focusRequester(rowFocusRequesters[rowIndex]),
+                                        )
+                                    } else if (showEmptyRows) {
+                                        FocusableItemRow(
+                                            title = r.title.getString(),
+                                            subtitle = stringResource(R.string.no_results),
+                                            modifier = rowModifier,
+                                        )
+                                    }
                                 }
 
                                 is HomeRowLoadingState.Success -> {

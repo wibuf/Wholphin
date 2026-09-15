@@ -3,6 +3,7 @@ package com.github.damontecres.wholphin.ui.main.settings
 import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.Composable
@@ -13,6 +14,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.res.stringResource
 import com.github.damontecres.wholphin.R
+import com.github.damontecres.wholphin.games.model.GameLibrary
 import com.github.damontecres.wholphin.ui.ifElse
 
 @Composable
@@ -21,6 +23,8 @@ fun HomeSettingsAddRow(
     showDiscover: Boolean,
     onClick: (Library) -> Unit,
     onClickMeta: (MetaRowType) -> Unit,
+    gameLibraries: List<GameLibrary> = emptyList(),
+    onClickGames: (GameLibrary) -> Unit = {},
     modifier: Modifier,
     firstFocus: FocusRequester = remember { FocusRequester() },
 ) {
@@ -57,6 +61,15 @@ fun HomeSettingsAddRow(
                     headlineText = library.name,
                     onClick = { onClick.invoke(library) },
                     modifier = Modifier, // .ifElse(index == 0, Modifier.focusRequester(firstFocus)),
+                )
+            }
+            // Fork-only: Moonbase games libraries get a newest-first row of their own
+            items(gameLibraries) { library ->
+                HomeSettingsListItem(
+                    selected = false,
+                    headlineText = stringResource(R.string.recently_added_in, library.name),
+                    onClick = { onClickGames.invoke(library) },
+                    modifier = Modifier,
                 )
             }
             item {

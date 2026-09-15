@@ -174,6 +174,23 @@ sealed interface HomeRowConfig {
     }
 
     /**
+     * Fork-only: games in a Moonbase library, newest first
+     *
+     * @param libraryId the Moonbase library id, which is the Jellyfin library id without dashes
+     * @param name the library's name, kept here because the Jellyfin view it belongs to is
+     *   hidden and may not be resolvable
+     */
+    @Serializable
+    @SerialName("Games")
+    data class Games(
+        val libraryId: String,
+        val name: String,
+        override val viewOptions: HomeRowViewOptions = HomeRowViewOptions(),
+    ) : HomeRowConfig {
+        override fun updateViewOptions(viewOptions: HomeRowViewOptions): Games = this.copy(viewOptions = viewOptions)
+    }
+
+    /**
      * An arbitrary [GetItemsRequest] allowing to query for anything
      */
     @Serializable
