@@ -3,6 +3,7 @@ package com.github.damontecres.wholphin.games.ui
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.github.damontecres.wholphin.games.CoreDownloadService
+import com.github.damontecres.wholphin.games.GameArtworkService
 import com.github.damontecres.wholphin.games.GameCore
 import com.github.damontecres.wholphin.games.GameCores
 import com.github.damontecres.wholphin.games.MoonbaseGamesService
@@ -36,6 +37,7 @@ class GameDetailViewModel
     constructor(
         @param:Assisted private val destination: Destination.GameDetail,
         val games: MoonbaseGamesService,
+        val artwork: GameArtworkService,
         private val cores: CoreDownloadService,
         private val navigationManager: NavigationManager,
     ) : ViewModel() {

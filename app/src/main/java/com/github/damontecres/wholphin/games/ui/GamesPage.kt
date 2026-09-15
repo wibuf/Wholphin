@@ -44,8 +44,9 @@ import androidx.tv.material3.TabRow
 import androidx.tv.material3.Text
 import coil3.compose.AsyncImage
 import com.github.damontecres.wholphin.R
-import com.github.damontecres.wholphin.games.MoonbaseGamesService
+import com.github.damontecres.wholphin.games.GameArtworkService
 import com.github.damontecres.wholphin.games.model.GameSummary
+import com.github.damontecres.wholphin.games.rememberArt
 import com.github.damontecres.wholphin.ui.AspectRatios
 import com.github.damontecres.wholphin.ui.OneTimeLaunchedEffect
 import com.github.damontecres.wholphin.ui.cards.ItemRow
@@ -57,6 +58,7 @@ import com.github.damontecres.wholphin.ui.enableMarquee
 import com.github.damontecres.wholphin.ui.tryRequestFocus
 import com.github.damontecres.wholphin.util.HomeRowLoadingState
 import com.github.damontecres.wholphin.util.LoadingState
+import java.io.File
 
 @Composable
 fun GamesPage(
@@ -132,7 +134,7 @@ fun GamesPage(
                     GameGrid(
                         libraryId = state.library?.id ?: "",
                         games = games,
-                        gamesService = viewModel.games,
+                        artwork = viewModel.artwork,
                         onClick = viewModel::open,
                         modifier = Modifier.fillMaxSize(),
                     )
@@ -146,7 +148,7 @@ fun GamesPage(
 private fun GameGrid(
     libraryId: String,
     games: List<GameSummary>,
-    gamesService: MoonbaseGamesService,
+    artwork: GameArtworkService,
     onClick: (GameSummary) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -158,9 +160,10 @@ private fun GameGrid(
         modifier = modifier.focusRestorer(),
     ) {
         items(games, key = { it.id }) { game ->
+            val art by artwork.rememberArt(libraryId, game.id)
             GameCard(
                 title = game.title,
-                imageUrl = gamesService.thumbUrl(libraryId, game.id),
+                art = art,
                 onClick = { onClick(game) },
             )
         }
@@ -187,9 +190,10 @@ fun GamesHomeRow(
         horizontalPadding = row.viewOptions.spacing.dp,
         cardContent = { index, game, cardModifier, onClick, _ ->
             if (game != null) {
+                val art by viewModel.artwork.rememberArt(row.libraryId, game.id)
                 GameCard(
                     title = game.title,
-                    imageUrl = viewModel.games.thumbUrl(row.libraryId, game.id),
+                    art = art,
                     onClick = onClick,
                     showTitle = row.viewOptions.showTitles,
                     modifier =
@@ -216,7 +220,7 @@ fun GamesHomeRow(
 @Composable
 fun GameCard(
     title: String,
-    imageUrl: String,
+    art: File?,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     showTitle: Boolean = true,
@@ -233,16 +237,34 @@ fun GameCard(
             colors = CardDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
             modifier = Modifier.fillMaxWidth(),
         ) {
-            AsyncImage(
-                model = imageUrl,
-                contentDescription = title,
-                contentScale = ContentScale.Fit,
+            Box(
+                contentAlignment = Alignment.Center,
                 modifier =
                     Modifier
                         .fillMaxWidth()
                         .aspectRatio(AspectRatios.TALL)
                         .background(MaterialTheme.colorScheme.surfaceVariant),
-            )
+            ) {
+                if (art != null) {
+                    AsyncImage(
+                        model = art,
+                        contentDescription = title,
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                } else {
+                    // Art is still on its way from the server, so the title stands in
+                    Text(
+                        text = title,
+                        textAlign = TextAlign.Center,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 4,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(8.dp),
+                    )
+                }
+            }
         }
         if (showTitle) {
             Text(

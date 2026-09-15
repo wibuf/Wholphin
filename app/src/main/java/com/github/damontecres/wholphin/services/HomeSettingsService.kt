@@ -11,6 +11,7 @@ import com.github.damontecres.wholphin.data.model.HomeRowViewOptions
 import com.github.damontecres.wholphin.data.model.SUPPORTED_HOME_PAGE_SETTINGS_VERSION
 import com.github.damontecres.wholphin.data.model.createGenreDestination
 import com.github.damontecres.wholphin.data.model.createStudioDestination
+import com.github.damontecres.wholphin.games.GameArtworkService
 import com.github.damontecres.wholphin.games.GameRecencyStore
 import com.github.damontecres.wholphin.games.MoonbaseGamesService
 import com.github.damontecres.wholphin.preferences.DefaultUserConfiguration
@@ -101,6 +102,7 @@ class HomeSettingsService
         private val displayPreferencesService: DisplayPreferencesService,
         private val moonbaseGamesService: MoonbaseGamesService,
         private val gameRecencyStore: GameRecencyStore,
+        private val gameArtworkService: GameArtworkService,
     ) {
         @OptIn(ExperimentalSerializationApi::class)
         val jsonParser =
@@ -618,6 +620,7 @@ class HomeSettingsService
             when (row) {
                 is HomeRowConfig.Games -> {
                     val games = gameRecencyStore.newestFirst(moonbaseGamesService.games(row.libraryId))
+                    gameArtworkService.prefetch(row.libraryId, games.take(limit))
                     HomeRowLoadingState.Games(
                         title = ResArgStringProvider(R.string.recently_added_in, row.name),
                         libraryId = row.libraryId,

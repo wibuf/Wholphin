@@ -2,6 +2,7 @@ package com.github.damontecres.wholphin.games.ui
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.github.damontecres.wholphin.games.GameArtworkService
 import com.github.damontecres.wholphin.games.MoonbaseGamesService
 import com.github.damontecres.wholphin.games.model.GameLibrary
 import com.github.damontecres.wholphin.games.model.GameSummary
@@ -37,6 +38,7 @@ class GamesViewModel
     @Inject
     constructor(
         val games: MoonbaseGamesService,
+        val artwork: GameArtworkService,
         val navigationManager: NavigationManager,
     ) : ViewModel() {
         private val _state = MutableStateFlow(GamesPageState())
@@ -66,6 +68,8 @@ class GamesViewModel
                         it.copy(loading = LoadingState.Success, libraries = libraries, library = library, systems = systems)
                     }
                     systems.firstOrNull()?.let { loadGames(library.id, it.id) }
+                    // Pull every game's art now so no system tab waits on the network later
+                    artwork.prefetchLibrary(library.id)
                 } catch (ex: CancellationException) {
                     throw ex
                 } catch (ex: Exception) {
@@ -91,6 +95,7 @@ class GamesViewModel
             viewModelScope.launch {
                 try {
                     val list = games.games(libraryId, systemId).sortedBy { it.title.lowercase() }
+                    artwork.prefetch(libraryId, list)
                     _state.update { it.copy(games = it.games + (systemId to list), loadingGames = false) }
                 } catch (ex: CancellationException) {
                     throw ex
@@ -115,6 +120,7 @@ class GamesRowViewModel
     @Inject
     constructor(
         val games: MoonbaseGamesService,
+        val artwork: GameArtworkService,
         private val navigationManager: NavigationManager,
     ) : ViewModel() {
         fun open(

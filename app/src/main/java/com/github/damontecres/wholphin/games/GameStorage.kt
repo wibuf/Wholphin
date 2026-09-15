@@ -39,6 +39,9 @@ class GameStorage
         /** SRAM and other per-game files the core writes itself */
         fun saveDir(): File = dir(context.filesDir, "games/saves")
 
+        /** Box art and other artwork fetched from the server, reclaimable like the ROMs */
+        fun artDir(libraryId: String): File = dir(context.cacheDir, "games/art/$libraryId")
+
         /** Downloaded cores, tagged by ABI so a shared directory stays correct across architectures */
         fun coresDir(abi: String): File = dir(context.filesDir, "games/cores/$abi")
 

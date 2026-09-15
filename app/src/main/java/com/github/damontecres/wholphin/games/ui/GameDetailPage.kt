@@ -2,12 +2,14 @@ package com.github.damontecres.wholphin.games.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -31,8 +33,10 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import coil3.compose.AsyncImage
 import com.github.damontecres.wholphin.R
+import com.github.damontecres.wholphin.games.rememberArt
 import com.github.damontecres.wholphin.ui.AspectRatios
 import com.github.damontecres.wholphin.ui.components.Button
+import com.github.damontecres.wholphin.ui.components.CircularProgress
 import com.github.damontecres.wholphin.ui.components.ErrorMessage
 import com.github.damontecres.wholphin.ui.components.LoadingPage
 import com.github.damontecres.wholphin.ui.components.TitleValueText
@@ -68,17 +72,27 @@ fun GameDetailPage(
                 horizontalArrangement = Arrangement.spacedBy(32.dp),
                 modifier = modifier.fillMaxSize().padding(horizontal = 48.dp, vertical = 32.dp),
             ) {
-                AsyncImage(
-                    model = viewModel.games.thumbUrl(viewModel.libraryId, detail.id),
-                    contentDescription = detail.title,
-                    contentScale = ContentScale.Fit,
+                val art by viewModel.artwork.rememberArt(viewModel.libraryId, detail.id)
+                Box(
+                    contentAlignment = Alignment.Center,
                     modifier =
                         Modifier
                             .width(260.dp)
                             .aspectRatio(AspectRatios.TALL)
                             .clip(RoundedCornerShape(8.dp))
                             .background(MaterialTheme.colorScheme.surfaceVariant),
-                )
+                ) {
+                    if (art != null) {
+                        AsyncImage(
+                            model = art,
+                            contentDescription = detail.title,
+                            contentScale = ContentScale.Fit,
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                    } else {
+                        CircularProgress(Modifier.size(32.dp))
+                    }
+                }
                 Column(
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                     modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),

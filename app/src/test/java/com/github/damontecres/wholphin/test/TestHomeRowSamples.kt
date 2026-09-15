@@ -136,6 +136,7 @@ class TestHomeRowSamples {
                 displayPreferencesService = mockk(),
                 moonbaseGamesService = mockk(),
                 gameRecencyStore = mockk(),
+                gameArtworkService = mockk(),
             )
 
         val str = """{
