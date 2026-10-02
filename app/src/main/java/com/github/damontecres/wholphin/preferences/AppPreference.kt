@@ -563,7 +563,8 @@ sealed interface AppPreference<Pref, T> {
         val UpdateUrl =
             AppStringPreference<AppPreferences>(
                 title = R.string.update_url,
-                defaultValue = "https://api.github.com/repos/damontecres/Wholphin/releases/latest",
+                // Upstream's release feed, or the fork's own one for personal fork builds
+                defaultValue = BuildConfig.DEFAULT_UPDATE_URL,
                 getter = { it.updateUrl },
                 setter = { prefs, value ->
                     prefs.update { updateUrl = value }

@@ -80,6 +80,19 @@ configure<ApplicationExtension> {
         testInstrumentationRunner = "com.github.damontecres.wholphin.test.WholphinTestRunner"
 
         buildConfigField("long", "BUILD_TIME", System.currentTimeMillis().toString())
+
+        // Personal fork builds (-PforkBuild) check their own update feed, served by Scuffed, and
+        // install updates themselves. Everything else keeps upstream's release feed. The upstream
+        // URL is repeated in services/update/ForkUpdates.kt, which needs it to spot old installs.
+        val forkBuild = project.hasProperty("forkBuild")
+        val updateUrl =
+            if (forkBuild) {
+                providers.gradleProperty("forkUpdateUrl").getOrElse("https://add.beefmc.com/update")
+            } else {
+                "https://api.github.com/repos/damontecres/Wholphin/releases/latest"
+            }
+        buildConfigField("String", "DEFAULT_UPDATE_URL", "\"$updateUrl\"")
+        buildConfigField("boolean", "SELF_UPDATE", forkBuild.toString())
     }
 
     signingConfigs {

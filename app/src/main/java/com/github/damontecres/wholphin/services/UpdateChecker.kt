@@ -160,7 +160,7 @@ class UpdateChecker
                 if (it.isSuccessful) {
                     val result = Json.parseToJsonElement(it.body.string())
                     val name = result.jsonObject["name"]?.jsonPrimitive?.contentOrNull
-                    val version = Version.tryFromString(name)
+                    val version = releaseVersion(name)
                     val publishedAt =
                         result.jsonObject["published_at"]?.jsonPrimitive?.contentOrNull
                     val body = result.jsonObject["body"]?.jsonPrimitive?.contentOrNull
@@ -405,6 +405,15 @@ suspend fun copyTo(
         return@withContext bytesCopied
     }
 
+/**
+ * The version a release is titled with
+ *
+ * Fork builds title their releases with the version followed by the branch they came from, eg
+ * `v1.0.7-83-g89fac169 (claude/some-branch)`, so only the leading version is read when the whole
+ * title is not one.
+ */
+fun releaseVersion(name: String?): Version? = Version.tryFromString(name) ?: Version.tryFromString(name?.trim()?.substringBefore(' '))
+
 fun getDownloadUrl(
     assets: JsonArray,
     debug: Boolean,
@@ -429,8 +438,34 @@ fun getDownloadUrl(
             }
         }
     }
-    return preferredAsset
+    return (preferredAsset ?: fullBuildNameAsset(assets, debug, supportedABIs.firstOrNull()))
         ?.get("browser_download_url")
         ?.jsonPrimitive
         ?.contentOrNull
+}
+
+private val KNOWN_ABIS = listOf("arm64-v8a", "armeabi-v7a", "x86_64", "x86")
+
+/**
+ * Fall back to the names the build itself gives its APKs, eg
+ * `Wholphin-default-release-1.0.7-83-g89fac169-59-arm64-v8a.apk`, which fork releases publish
+ * as-is. Prefers the device's ABI, then the universal APK that has no ABI in its name.
+ */
+private fun fullBuildNameAsset(
+    assets: JsonArray,
+    debug: Boolean,
+    abi: String?,
+): JsonObject? {
+    val buildType = if (debug) "-debug-" else "-release-"
+    val candidates =
+        assets
+            .map { it.jsonObject }
+            .filter { asset ->
+                val name = asset["name"]?.jsonPrimitive?.contentOrNull.orEmpty()
+                name.startsWith("$ASSET_NAME-") && name.endsWith(".apk") && name.contains(buildType)
+            }
+
+    fun nameOf(asset: JsonObject) = asset["name"]?.jsonPrimitive?.contentOrNull.orEmpty()
+    return abi?.let { a -> candidates.firstOrNull { nameOf(it).endsWith("-$a.apk") } }
+        ?: candidates.firstOrNull { asset -> KNOWN_ABIS.none { nameOf(asset).endsWith("-$it.apk") } }
 }

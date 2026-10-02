@@ -60,6 +60,7 @@ import com.github.damontecres.wholphin.services.UserPreferencesService
 import com.github.damontecres.wholphin.services.UserSwitchListener
 import com.github.damontecres.wholphin.services.hilt.AuthOkHttpClient
 import com.github.damontecres.wholphin.services.tvprovider.TvProviderSchedulerService
+import com.github.damontecres.wholphin.services.update.SelfUpdater
 import com.github.damontecres.wholphin.ui.CoilConfig
 import com.github.damontecres.wholphin.ui.LocalImageUrlService
 import com.github.damontecres.wholphin.ui.LocalMdbListRatingsService
@@ -131,6 +132,9 @@ class MainActivity : AppCompatActivity() {
 
     @Inject
     lateinit var libretroBridge: LibretroBridge
+
+    @Inject
+    lateinit var selfUpdater: SelfUpdater
 
     // Routes gamepad input straight to the native emulator while a game runs. Nullable rather
     // than lateinit since dispatchKeyEvent can run before onCreate wires it.
@@ -247,6 +251,7 @@ class MainActivity : AppCompatActivity() {
 
         viewModel.appStart(intent)
         setupGameInput()
+        selfUpdater.schedule()
         setContent {
             MaterialTheme(colorScheme = PurpleThemeColors.darkScheme) {
                 Surface(Modifier.fillMaxSize()) {
@@ -422,6 +427,7 @@ class MainActivity : AppCompatActivity() {
         Timber.d("onStop")
         screensaverService.stop(true)
         tvProviderSchedulerService.launchOneTimeRefresh()
+        selfUpdater.onBackground(externalPlayback = playExternalViewModel.launched.value)
     }
 
     override fun onPause() {
@@ -437,6 +443,11 @@ class MainActivity : AppCompatActivity() {
         super.onStart()
         Timber.d("onStart")
 
+        // Builds that update themselves do it quietly instead of nudging with a toast
+        if (SelfUpdater.ENABLED) {
+            selfUpdater.onForeground()
+            return
+        }
         lifecycleScope.launchDefault {
             val appPreferences = userPreferencesDataStore.data.first()
             if (UpdateChecker.ACTIVE && appPreferences.autoCheckForUpdates) {
