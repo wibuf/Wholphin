@@ -101,6 +101,7 @@ import kotlinx.coroutines.withContext
 import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.api.client.extensions.mediaInfoApi
 import org.jellyfin.sdk.api.client.extensions.mediaSegmentsApi
+import org.jellyfin.sdk.api.client.extensions.playStateApi
 import org.jellyfin.sdk.api.client.extensions.sessionApi
 import org.jellyfin.sdk.api.client.extensions.trickplayApi
 import org.jellyfin.sdk.api.client.extensions.userLibraryApi
@@ -114,6 +115,7 @@ import org.jellyfin.sdk.model.api.MediaStreamType
 import org.jellyfin.sdk.model.api.MediaType
 import org.jellyfin.sdk.model.api.PlayMethod
 import org.jellyfin.sdk.model.api.PlaybackInfoDto
+import org.jellyfin.sdk.model.api.PlaybackStopInfo
 import org.jellyfin.sdk.model.api.PlaystateCommand
 import org.jellyfin.sdk.model.api.PlaystateMessage
 import org.jellyfin.sdk.model.api.TrickplayInfo
@@ -194,6 +196,11 @@ class PlaybackViewModel
         private val liveTvRetryPolicy = LiveTvRetryPolicy()
         private var liveTvRetryJob: Job? = null
         private var liveTvStallJob: Job? = null
+
+        // Whether the current live stream got as far as playing. A failure before that is a
+        // startup problem, fixed by changing how it is played; one after is a dropout, fixed by
+        // reconnecting the same way.
+        private var liveTvStarted = false
 
         private val isPlaylist = destination is Destination.PlaybackList
 
@@ -482,6 +489,11 @@ class PlaybackViewModel
                 // item is a live stream and leave it selecting sources it does not have
                 val isLiveTv = item.type.isLiveTvStream
                 val base = item.data
+                liveTvStarted = false
+                // A channel that has already failed to play directly goes straight to the
+                // transcode it ended up needing, rather than failing the same way first
+                val transcodeOnly =
+                    forceTranscoding || (isLiveTv && LiveTvTranscodeMemory.needsTranscode(item.id))
 
                 // Use the provided playback parameters or else check if the database has some
                 val itemPlayback =
@@ -607,8 +619,8 @@ class PlaybackViewModel
                         subtitleIndex = subtitleIndex,
                         positionMs = if (positionMs > 0) positionMs else C.TIME_UNSET,
                         sourceId = mediaSource?.id,
-                        enableDirectPlay = !forceTranscoding,
-                        enableDirectStream = !forceTranscoding,
+                        enableDirectPlay = !transcodeOnly,
+                        enableDirectStream = !transcodeOnly,
                     )
                     player.prepare()
                     player.play()
@@ -712,6 +724,12 @@ class PlaybackViewModel
                                     static = true,
                                     tag = source.eTag,
                                     playSessionId = response.playSessionId,
+                                    // For live TV the playback info request above has already
+                                    // opened the stream. Without its id the server cannot find
+                                    // it, so it resolves the channel's raw source all over again
+                                    // instead, which fails or opens a second upstream connection.
+                                    // The web client sends it for the same reason.
+                                    liveStreamId = source.liveStreamId,
                                 )
                             }
                         } else if (source.supportsDirectStream) {
@@ -1083,11 +1101,18 @@ class PlaybackViewModel
             when (playbackState) {
                 // A live stream that stops feeding does not necessarily report an error, so a
                 // buffer that never ends is the only sign that anything is wrong
-                Player.STATE_BUFFERING -> armLiveTvStallWatchdog()
+                Player.STATE_BUFFERING -> {
+                    armLiveTvStallWatchdog()
+                }
 
-                Player.STATE_READY -> cancelLiveTvStallWatchdog()
+                Player.STATE_READY -> {
+                    liveTvStarted = true
+                    cancelLiveTvStallWatchdog()
+                }
 
-                Player.STATE_IDLE -> cancelLiveTvStallWatchdog()
+                Player.STATE_IDLE -> {
+                    cancelLiveTvStallWatchdog()
+                }
             }
             if (playbackState == Player.STATE_ENDED) {
                 Timber.v("Playback state is STATE_ENDED")
@@ -1398,12 +1423,9 @@ class PlaybackViewModel
         override fun onPlayerError(error: PlaybackException) {
             Timber.e(error, "Playback error")
             viewModelScope.launch(WholphinDispatchers.Main + ExceptionHandler()) {
-                // Live TV drops are usually transient, so restart the stream a few times before
-                // surfacing the error. Handled before the play method dispatch below because a
-                // live channel is served straight from the tuner and so fails while direct
-                // playing at least as often as while transcoding, and because the fallback below
-                // resumes from a position that means nothing for a live stream.
-                if (retryLiveTvStream()) {
+                // Live TV gets its own recovery: straight to a transcode if it never started,
+                // reconnecting if it was playing. See recoverLiveTvStream.
+                if (recoverLiveTvStream()) {
                     return@launch
                 }
                 state.value.currentPlayback?.let {
@@ -1431,7 +1453,14 @@ class PlaybackViewModel
                                 sourceId = currentPlayback?.mediaSourceInfo?.id,
                                 audioIndex = currentPlayback?.audioIndex,
                                 subtitleIndex = currentPlayback?.subtitleIndex,
-                                positionMs = player.currentPosition,
+                                // A position within a live stream means nothing to the new one,
+                                // so live TV starts at the live edge instead
+                                positionMs =
+                                    if (currentItem.item.type.isLiveTvStream) {
+                                        C.TIME_UNSET
+                                    } else {
+                                        player.currentPosition
+                                    },
                                 enableDirectPlay = false,
                                 enableDirectStream = false,
                             )
@@ -1446,53 +1475,141 @@ class PlaybackViewModel
         }
 
         /**
-         * Restart a failed live TV stream, if it is live TV and it has retries left
+         * Recover a failed live TV stream, if it is live TV and there is anything left to try
+         *
+         * A channel that failed before it ever played while playing directly goes straight to a
+         * server transcode. That failure is almost always a format or URL problem, so asking for
+         * the same thing again only fails the same way, more slowly, which is what used to make a
+         * channel sit through every reconnect before it finally played. A stream that was already
+         * playing and then dropped is reconnected the same way, a few times with a growing wait.
          *
          * Playback is restarted through [play] rather than [Player.prepare] because the server
          * opens a new live stream for each playback request, so the URL the player is holding is
-         * dead once the tuner has dropped it and re-preparing it would just fail again straight
-         * away. [changeStreams] re-requests playback info too, but it short circuits into
-         * [changeStreamsDirectPlay] when the current stream is direct playing, which only swaps
-         * track selections on the media item that has already failed.
+         * dead once the tuner has dropped it. [changeStreams] re-requests playback info too, but
+         * it short circuits into [changeStreamsDirectPlay] when the current stream is direct
+         * playing, which only swaps track selections on the media item that has already failed.
          *
          * @return true if a restart was scheduled, false if the caller should show the error
          */
-        private fun retryLiveTvStream(): Boolean {
+        private fun recoverLiveTvStream(): Boolean {
             if (!this::currentItem.isInitialized || !currentItem.item.type.isLiveTvStream) {
                 return false
             }
-            val attempt = liveTvRetryPolicy.onFailure(SystemClock.elapsedRealtime())
-            if (attempt == null) {
-                Timber.w("Live TV stream failed too many times, giving up")
-                return false
+            val channelId = currentItem.item.id
+            val playMethod = state.value.currentPlayback?.playMethod
+            // An unknown method counts as transcoding, so an unexpected state can only ever
+            // reconnect and never loop on the fallback
+            val transcoding =
+                playMethod == null ||
+                    playMethod == PlayMethod.TRANSCODE ||
+                    LiveTvTranscodeMemory.needsTranscode(channelId)
+            val recovery =
+                liveTvRetryPolicy.decide(
+                    nowMs = SystemClock.elapsedRealtime(),
+                    started = liveTvStarted,
+                    transcoding = transcoding,
+                )
+            when (recovery) {
+                LiveTvRecovery.GiveUp -> {
+                    Timber.w("Live TV stream failed too many times, giving up")
+                    return false
+                }
+
+                LiveTvRecovery.FallBackToTranscode -> {
+                    Timber.w("Live TV failed to start with %s, falling back to transcoding", playMethod)
+                    LiveTvTranscodeMemory.markNeedsTranscode(channelId)
+                    restartLiveTvStream(Duration.ZERO, toast = null)
+                }
+
+                is LiveTvRecovery.Reconnect -> {
+                    Timber.i(
+                        "Live TV stream failed, restarting in %s (attempt %d of %d)",
+                        recovery.delay,
+                        recovery.attempt,
+                        LIVE_TV_MAX_RETRIES,
+                    )
+                    restartLiveTvStream(
+                        recovery.delay,
+                        toast =
+                            context.getString(
+                                R.string.live_tv_reconnecting,
+                                recovery.attempt,
+                                LIVE_TV_MAX_RETRIES,
+                            ),
+                    )
+                }
             }
-            Timber.i("Live TV stream failed, restarting (attempt %d of %d)", attempt, LIVE_TV_MAX_RETRIES)
-            // Show the loading spinner instead of the error page while reconnecting
+            return true
+        }
+
+        /**
+         * Close the failed live stream, then play the channel again after [wait]
+         *
+         * @param toast shown while reconnecting, or null to restart quietly
+         */
+        private fun restartLiveTvStream(
+            wait: Duration,
+            toast: String?,
+        ) {
+            cancelLiveTvStallWatchdog()
+            // Show the loading spinner instead of the error page while restarting
             _state.update { it.copy(loading = LoadingState.Loading) }
             liveTvRetryJob?.cancel()
             // Deliberately not registered in [jobs]: play() below can rebuild the player, and
-            // disconnectPlayer() cancels everything in [jobs], which would cancel this retry
+            // disconnectPlayer() cancels everything in [jobs], which would cancel this restart
             // part way through. It is cancelled by release() and by viewModelScope instead.
             liveTvRetryJob =
                 viewModelScope.launch(WholphinDispatchers.Main + ExceptionHandler()) {
-                    showToast(
-                        context,
-                        context.getString(
-                            R.string.live_tv_reconnecting,
-                            attempt,
-                            LIVE_TV_MAX_RETRIES,
-                        ),
-                        Toast.LENGTH_SHORT,
-                    )
-                    // Back off a little further on each attempt
-                    delay(LIVE_TV_RETRY_DELAY * attempt)
+                    toast?.let { showToast(context, it, Toast.LENGTH_SHORT) }
+                    endFailedLiveTvStream()
+                    delay(wait)
                     if (!play(currentItem, 0L)) {
                         _state.update {
                             it.copy(loading = LoadingState.Error("Error during playback"))
                         }
                     }
                 }
-            return true
+        }
+
+        /**
+         * Tell the server the failed live stream is finished, and wait for it to act
+         *
+         * The stop report is what makes the server close the live stream and kill its transcode.
+         * Sending it here, before the next playback request, means the tuner and any upstream
+         * connection are free again before that request asks for them. Left to the activity
+         * listener, it would only go out after the next stream had already been opened, so for a
+         * moment both would be held, which a connection limited source can refuse.
+         */
+        private suspend fun endFailedLiveTvStream() {
+            val playback = state.value.currentPlayback
+            withContext(WholphinDispatchers.Main) {
+                if (this@PlaybackViewModel::player.isInitialized) {
+                    player.stop()
+                    activityListener?.let {
+                        it.release(reportStopped = false)
+                        player.removeListener(it)
+                    }
+                }
+                activityListener = null
+            }
+            if (playback == null) return
+            try {
+                withContext(WholphinDispatchers.IO) {
+                    api.playStateApi.reportPlaybackStopped(
+                        PlaybackStopInfo(
+                            itemId = playback.item.id,
+                            failed = true,
+                            playSessionId = playback.playSessionId,
+                            liveStreamId = playback.liveStreamId,
+                        ),
+                    )
+                }
+            } catch (ex: CancellationException) {
+                throw ex
+            } catch (ex: Exception) {
+                // Carry on regardless: the server also expires abandoned streams on its own
+                Timber.w(ex, "Could not report the failed live stream as stopped")
+            }
         }
 
         /**
@@ -1500,8 +1617,9 @@ class PlaybackViewModel
          *
          * [onPlayerError] only fires when the player actually reports a failure. A live stream can
          * instead just stop being fed while the connection stays open, which leaves the player
-         * buffering indefinitely with no error to react to and no retry ever starting. Treating a
-         * long enough buffer as a failure routes it into the same retry path.
+         * buffering indefinitely with no error to react to. Treating a long enough buffer as a
+         * failure routes it into the same recovery. A channel that has not played yet is still
+         * tuning in, which can take a while, so it gets the longer [LIVE_TV_START_TIMEOUT].
          */
         private fun armLiveTvStallWatchdog() {
             if (!this::currentItem.isInitialized || !currentItem.item.type.isLiveTvStream) {
@@ -1511,17 +1629,15 @@ class PlaybackViewModel
                 // Already watching this buffer, do not restart the clock
                 return
             }
+            val timeout = if (liveTvStarted) LIVE_TV_STALL_TIMEOUT else LIVE_TV_START_TIMEOUT
             liveTvStallJob =
                 viewModelScope.launch(WholphinDispatchers.Main + ExceptionHandler()) {
-                    delay(LIVE_TV_STALL_TIMEOUT)
-                    // This watch is spent. Clear it before retrying, or the restart's own buffer
+                    delay(timeout)
+                    // This watch is spent. Clear it before recovering, or the restart's own buffer
                     // would see a still-running job and decline to arm a fresh watchdog.
                     liveTvStallJob = null
-                    Timber.w(
-                        "Live TV stream buffered for %s without recovering, treating as failed",
-                        LIVE_TV_STALL_TIMEOUT,
-                    )
-                    if (!retryLiveTvStream()) {
+                    Timber.w("Live TV stream buffered for %s without recovering, treating as failed", timeout)
+                    if (!recoverLiveTvStream()) {
                         _state.update {
                             it.copy(
                                 loading = LoadingState.Error("Live TV stream stopped responding"),

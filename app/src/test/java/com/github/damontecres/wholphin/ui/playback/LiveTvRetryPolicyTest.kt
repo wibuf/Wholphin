@@ -89,4 +89,54 @@ class LiveTvRetryPolicyTest {
         val policy = policy()
         assertEquals(1, policy.onFailure(999_999_999L))
     }
+
+    @Test
+    fun `a direct stream that never started falls back to a transcode`() {
+        val policy = policy()
+        assertEquals(
+            LiveTvRecovery.FallBackToTranscode,
+            policy.decide(0L, started = false, transcoding = false),
+        )
+    }
+
+    @Test
+    fun `falling back does not use up a reconnect`() {
+        val policy = policy()
+        policy.decide(0L, started = false, transcoding = false)
+        // The transcode that replaced it then drops, and still gets all of its reconnects
+        assertEquals(
+            LiveTvRecovery.Reconnect(1, kotlin.time.Duration.ZERO),
+            policy.decide(100L, started = true, transcoding = true),
+        )
+        assertEquals(2, (policy.decide(200L, started = true, transcoding = true) as LiveTvRecovery.Reconnect).attempt)
+        assertEquals(3, (policy.decide(300L, started = true, transcoding = true) as LiveTvRecovery.Reconnect).attempt)
+        assertEquals(LiveTvRecovery.GiveUp, policy.decide(400L, started = true, transcoding = true))
+    }
+
+    @Test
+    fun `a transcode that never started reconnects rather than falling back again`() {
+        val policy = policy()
+        // Already transcoding, so there is nothing to fall back to and looping on it would hang
+        assertEquals(
+            LiveTvRecovery.Reconnect(1, kotlin.time.Duration.ZERO),
+            policy.decide(0L, started = false, transcoding = true),
+        )
+    }
+
+    @Test
+    fun `a direct stream that dropped mid show reconnects the same way`() {
+        val policy = policy()
+        // It played, so the method works and the drop is the tuner, not the format
+        assertEquals(
+            LiveTvRecovery.Reconnect(1, kotlin.time.Duration.ZERO),
+            policy.decide(0L, started = true, transcoding = false),
+        )
+    }
+
+    @Test
+    fun `the first reconnect is immediate and later ones back off`() {
+        assertEquals(kotlin.time.Duration.ZERO, LiveTvRetryPolicy.delayFor(1))
+        assertEquals(LIVE_TV_RETRY_DELAY, LiveTvRetryPolicy.delayFor(2))
+        assertEquals(LIVE_TV_RETRY_DELAY * 2, LiveTvRetryPolicy.delayFor(3))
+    }
 }

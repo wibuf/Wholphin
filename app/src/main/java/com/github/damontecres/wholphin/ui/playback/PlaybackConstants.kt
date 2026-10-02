@@ -21,17 +21,30 @@ val BaseItemKind.isLiveTvStream: Boolean
 /** How many times to restart a failed live TV stream before giving up and showing an error */
 const val LIVE_TV_MAX_RETRIES = 3
 
-/** Delay before restarting a failed live TV stream, multiplied by the attempt number */
+/**
+ * How much longer each live TV reconnect waits than the one before
+ *
+ * The first reconnect goes straight away, since waiting only delays a stream that would have come
+ * back. Later ones wait this, then twice this, to give a tuner that is genuinely recovering room.
+ */
 val LIVE_TV_RETRY_DELAY = 2.seconds
 
 /**
- * How long a live stream may sit buffering before it is treated as failed
+ * How long a live stream that was playing may sit buffering before it is treated as failed
  *
  * A dropped live stream does not always report an error: the tuner can stop feeding the server
  * while the connection stays open, and the player then buffers forever with nothing to react to.
- * Long enough that a slow tune-in is not mistaken for a hang.
  */
 val LIVE_TV_STALL_TIMEOUT = 20.seconds
+
+/**
+ * How long a live channel may take to start before it is treated as failed
+ *
+ * Longer than [LIVE_TV_STALL_TIMEOUT] because tuning in can legitimately take a while when the
+ * server has to open the tuner and start a transcode, and giving up early would throw that work
+ * away and start it all again from scratch.
+ */
+val LIVE_TV_START_TIMEOUT = 45.seconds
 
 /**
  * If a live stream ran for at least this long before failing, the retry counter is reset

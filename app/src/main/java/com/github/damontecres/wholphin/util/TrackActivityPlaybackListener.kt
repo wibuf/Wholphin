@@ -76,10 +76,17 @@ class TrackActivityPlaybackListener(
         }
     }
 
-    fun release() {
+    /**
+     * Stop reporting progress, and tell the server playback stopped
+     *
+     * @param reportStopped false when the caller sends the stop report itself, eg because it has
+     * to wait for the server to act on it before carrying on
+     */
+    fun release(reportStopped: Boolean = true) {
 //        player.removeListener(this)
         task.cancel()
         TIMER.purge()
+        if (!reportStopped) return
         val position = player.currentPosition.milliseconds
         launch("reportPlaybackStopped") {
             getState.invoke()?.let { state ->
