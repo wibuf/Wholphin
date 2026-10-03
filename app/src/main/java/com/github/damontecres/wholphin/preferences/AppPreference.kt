@@ -680,7 +680,7 @@ sealed interface AppPreference<Pref, T> {
         val SubtitlePreferredKeywords =
             AppStringPreference<AppPreferences>(
                 title = R.string.subtitle_preferred_keywords,
-                defaultValue = if (BuildConfig.GOOSEFLIX) "full, dialogue" else "",
+                defaultValue = if (BuildConfig.GOOSEFLIX) "full, dialogue, eng" else "",
                 getter = { it.playbackPreferences.subtitlePreferredKeywords },
                 setter = { prefs, value ->
                     prefs.updatePlaybackPreferences { subtitlePreferredKeywords = value.trim() }
@@ -691,7 +691,7 @@ sealed interface AppPreference<Pref, T> {
         val SubtitleAvoidedKeywords =
             AppStringPreference<AppPreferences>(
                 title = R.string.subtitle_avoided_keywords,
-                defaultValue = if (BuildConfig.GOOSEFLIX) "signs, songs, commentary" else "",
+                defaultValue = if (BuildConfig.GOOSEFLIX) "signs, songs, forced, foreign, dub, commentary, ext" else "",
                 getter = { it.playbackPreferences.subtitleAvoidedKeywords },
                 setter = { prefs, value ->
                     prefs.updatePlaybackPreferences { subtitleAvoidedKeywords = value.trim() }

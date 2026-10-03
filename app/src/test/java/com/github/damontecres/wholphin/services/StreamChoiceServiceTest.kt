@@ -928,9 +928,11 @@ class TestStreamChoiceServiceKeywords(
                         ),
                 ),
                 // Preferred keyword match qualifies a non-default track in DEFAULT mode
+                // (Japanese audio, as with most anime)
                 TestInput(
                     expectedIndex = 1,
                     userSubtitleMode = SubtitlePlaybackMode.DEFAULT,
+                    streamAudioLang = "jpn",
                     subtitles =
                         listOf(
                             subtitle(0, "eng", default = true, title = "Signs & Songs"),
@@ -1119,12 +1121,77 @@ class TestStreamChoiceServiceKeywordEdgeCases(
                 TestInput(
                     expectedIndex = 0,
                     userSubtitleMode = SubtitlePlaybackMode.DEFAULT,
+                    streamAudioLang = "jpn",
                     subtitles =
                         listOf(
                             subtitle(0, "eng", title = "Full Dialogue"),
                             subtitle(1, "eng", title = "Signs & Songs"),
                         ),
                     preferredKeywords = "full",
+                ),
+                // ...but not over audio already in the track's language (an English dub,
+                // or an English-only show): stock leaves these off, and so do keywords
+                TestInput(
+                    expectedIndex = null,
+                    userSubtitleMode = SubtitlePlaybackMode.DEFAULT,
+                    streamAudioLang = "eng",
+                    subtitles =
+                        listOf(
+                            subtitle(0, "eng", title = "English"),
+                            subtitle(1, "eng", title = "Signs & Songs"),
+                        ),
+                    preferredKeywords = "full, dialogue, eng",
+                ),
+                // Keywords match the start of a word: "eng" finds "English", not "Bengali"
+                TestInput(
+                    expectedIndex = 1,
+                    userSubtitleMode = SubtitlePlaybackMode.ALWAYS,
+                    userSubtitleLang = null,
+                    subtitles =
+                        listOf(
+                            subtitle(0, "ben", title = "Bengali"),
+                            subtitle(1, "eng", title = "English [CR]"),
+                        ),
+                    preferredKeywords = "eng",
+                ),
+                // Avoided keywords skip [group tags]: "songs" in a group name isn't a signs track
+                TestInput(
+                    expectedIndex = 0,
+                    userSubtitleMode = SubtitlePlaybackMode.ALWAYS,
+                    subtitles =
+                        listOf(
+                            subtitle(0, "eng", title = "Full Subtitles [MTBB (Hakoniwa songs)]"),
+                            subtitle(1, "eng", default = true),
+                        ),
+                    preferredKeywords = "full",
+                    avoidedKeywords = "signs, songs",
+                ),
+                // Equal keyword scores go to the track without hearing-impaired extras,
+                // even when the CC track carries the default flag
+                TestInput(
+                    expectedIndex = 1,
+                    userSubtitleMode = SubtitlePlaybackMode.ALWAYS,
+                    subtitles =
+                        listOf(
+                            subtitle(0, "eng", default = true, hearingImpaired = true, title = "English (CC)"),
+                            subtitle(1, "eng", title = "English"),
+                        ),
+                    preferredKeywords = "full, dialogue, eng",
+                ),
+                // The survey's lists on a typical WEB-DL release: untitled full track (shown
+                // by Jellyfin as "English - Default - ASS"), forced signs, and dubtitles
+                TestInput(
+                    expectedIndex = 1,
+                    userSubtitleMode = SubtitlePlaybackMode.ALWAYS,
+                    streamAudioLang = "jpn",
+                    subtitles =
+                        listOf(
+                            subtitle(0, "eng", forced = true, title = "Forced (Signs only)"),
+                            subtitle(1, "eng", default = true, displayTitle = "English - Default - ASS"),
+                            subtitle(2, "eng", hearingImpaired = true, title = "Dubtitle (SDH)"),
+                        ),
+                    preferredKeywords = "full, dialogue, eng",
+                    avoidedKeywords = "signs, songs, forced, foreign, dub, commentary, ext",
                 ),
             )
     }
@@ -1209,13 +1276,16 @@ fun subtitle(
     default: Boolean = false,
     forced: Boolean = false,
     title: String? = null,
+    hearingImpaired: Boolean = false,
+    displayTitle: String? = null,
 ): MediaStream =
     MediaStream(
         type = MediaStreamType.SUBTITLE,
         language = lang,
         isDefault = default,
         isForced = forced,
-        isHearingImpaired = false,
+        isHearingImpaired = hearingImpaired,
+        displayTitle = displayTitle,
         isInterlaced = false,
         index = index,
         isExternal = false,
@@ -1249,3 +1319,23 @@ private fun plc(
         subtitleLanguage = subtitleLang,
         subtitlesDisabled = subtitlesDisabled,
     )
+
+class KeywordMatchingTest {
+    @Test
+    fun `keywords match at the start of a word`() {
+        Assert.assertTrue(StreamChoiceService.titleMatches("English - Default - ASS", listOf("eng")))
+        Assert.assertTrue(StreamChoiceService.titleMatches("[eng] Full", listOf("eng")))
+        Assert.assertTrue(StreamChoiceService.titleMatches("Dubtitle (SDH)", listOf("dub")))
+        Assert.assertTrue(StreamChoiceService.titleMatches("Signs/Songs", listOf("songs")))
+        Assert.assertTrue(StreamChoiceService.titleMatches("English - SUBRIP - External", listOf("ext")))
+        Assert.assertFalse(StreamChoiceService.titleMatches("Bengali", listOf("eng")))
+        Assert.assertFalse(StreamChoiceService.titleMatches("English [CEB Restyled]", listOf("styled")))
+    }
+
+    @Test
+    fun `group tags can be left out`() {
+        Assert.assertEquals("Full Subtitles  ", StreamChoiceService.withoutTags("Full Subtitles [Official+Signs/Songs]"))
+        Assert.assertEquals("[Signs]", StreamChoiceService.withoutTags("[Signs]"))
+        Assert.assertEquals("Forced (Signs only)", StreamChoiceService.withoutTags("Forced (Signs only)"))
+    }
+}

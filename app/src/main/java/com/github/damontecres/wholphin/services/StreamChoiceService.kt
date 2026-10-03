@@ -274,6 +274,10 @@ class StreamChoiceService
                         .sortedWith(
                             compareByDescending<MediaStream> {
                                 keywordScore(it, preferredKeywords, avoidedKeywords)
+                            }.thenByDescending {
+                                // With keywords set, two equally matched tracks (eg "English" and
+                                // "English (CC)") go to the one without hearing-impaired extras
+                                preferredKeywords.isNotEmpty() && it.isHearingImpaired != true
                             }.thenByDescending { it.isExternal }
                                 .thenByDescending { it.isDefault }
                                 .thenByDescending {
@@ -329,9 +333,16 @@ class StreamChoiceService
 
                     SubtitlePlaybackMode.DEFAULT -> {
                         // A preferred keyword match qualifies a track just like the default flag,
-                        // so users can pick a non-default track (eg "Full Dialogue") by keyword
+                        // so users can pick a non-default track (eg "Full Dialogue") by keyword.
+                        // Not when the audio is already in the track's language, though: that
+                        // would turn subtitles on over an English dub or an English-only show.
                         val isDefaultLike = { track: MediaStream ->
-                            track.isDefault || track.isForced || matchesKeyword(track, preferredKeywords)
+                            track.isDefault ||
+                                track.isForced ||
+                                (
+                                    matchesKeyword(track, preferredKeywords) &&
+                                        !(audioStreamLang != null && track.language.equals(audioStreamLang, true))
+                                )
                         }
                         if (subtitleLanguage.isNotNullOrBlank()) {
                             candidates.firstOrNull { it.language == subtitleLanguage && isDefaultLike(it) }
@@ -348,14 +359,20 @@ class StreamChoiceService
             }
         }
 
-        /** Returns true if the track's title matches any of the keywords (case-insensitive). */
+        /**
+         * Returns true if a word in the track's title starts with any of the keywords
+         * (case-insensitive), so "eng" finds "English" but not "Bengali". With [ignoreTags],
+         * [bracketed] release-group tags are left out first, so "Full Subtitles [Official+Signs]"
+         * doesn't count as a signs track.
+         */
         private fun matchesKeyword(
             track: MediaStream,
             keywords: List<String>,
+            ignoreTags: Boolean = false,
         ): Boolean {
             if (keywords.isEmpty()) return false
             val title = track.title ?: track.displayTitle ?: return false
-            return keywords.any { title.contains(it, ignoreCase = true) }
+            return titleMatches(if (ignoreTags) withoutTags(title) else title, keywords)
         }
 
         /**
@@ -370,7 +387,7 @@ class StreamChoiceService
         ): Int {
             var score = 0
             if (matchesKeyword(track, preferredKeywords)) score++
-            if (matchesKeyword(track, avoidedKeywords)) score--
+            if (matchesKeyword(track, avoidedKeywords, ignoreTags = true)) score--
             return score
         }
 
@@ -406,6 +423,25 @@ class StreamChoiceService
         }
 
         companion object {
+            /** True if a word in [title] starts with one of [keywords], ignoring case */
+            fun titleMatches(
+                title: String,
+                keywords: List<String>,
+            ): Boolean =
+                keywords.any { keyword ->
+                    var from = title.indexOf(keyword, ignoreCase = true)
+                    while (from >= 0) {
+                        if (from == 0 || !title[from - 1].isLetterOrDigit()) return@any true
+                        from = title.indexOf(keyword, from + 1, ignoreCase = true)
+                    }
+                    false
+                }
+
+            /** [title] without its [bracketed] tags, unless that leaves nothing */
+            fun withoutTags(title: String): String = title.replace(BRACKET_TAG, " ").takeIf { it.isNotBlank() } ?: title
+
+            private val BRACKET_TAG = Regex("""\[[^\]]*]""")
+
             /** Splits a comma-separated keyword preference into non-blank keywords */
             fun parseKeywords(value: String?): List<String> =
                 value
