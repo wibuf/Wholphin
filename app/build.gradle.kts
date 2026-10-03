@@ -75,7 +75,17 @@ configure<ApplicationExtension> {
         applicationId = "com.github.damontecres.wholphin"
         minSdk = libs.versions.minSdk.getInt()
         targetSdk = libs.versions.targetSdk.getInt()
-        versionCode = gitTags.trim().lines().size
+        // Upstream numbers releases by tag count. Fork builds come out between tags, all with
+        // the same count, and Google Play needs every upload numbered above the last: they add
+        // the commits since the tag, eg v1.0.7-97 is 59 tags * 10000 + 97 = 590097
+        val tagCount = gitTags.trim().lines().size
+        val sinceTag =
+            Regex("-(\\d+)-g[0-9a-f]+$")
+                .find(gitDescribe.trim())
+                ?.groupValues
+                ?.get(1)
+                ?.toInt() ?: 0
+        versionCode = if (project.hasProperty("forkBuild")) tagCount * 10000 + sinceTag else tagCount
         versionName = gitDescribe.trim().removePrefix("v").ifBlank { "0.0.0" }
         testInstrumentationRunner = "com.github.damontecres.wholphin.test.WholphinTestRunner"
 

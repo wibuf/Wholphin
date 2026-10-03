@@ -81,6 +81,9 @@ jobs:
           ORG_GRADLE_PROJECT_WholphinExtensionsPassword: "${{ secrets.EXTENSIONS_PASSWORD }}"
         run: |
           ./gradlew assembleDefaultRelease -PforkBuild --no-daemon
+          # The Google Play build: the TV-only "appstore" flavour, updated by Play rather than
+          # by itself, as an app bundle for the Play Console's internal testing track
+          ./gradlew bundleAppstoreRelease -PforkBuild --no-daemon
 
       - name: Verify APK signatures
         run: |
@@ -105,8 +108,8 @@ jobs:
 
           Full release build with the same playback extensions (MPV / FFmpeg / AV1) as the official app. Installs side-by-side with the official Wholphin release as a separate `.fork` package.
 
-          Installed fork builds keep themselves up to date from the Wholphin+ update feed, which publishes a build once it has been verified on the home Shield.' > ci_release_note.txt
+          Installed fork builds keep themselves up to date from the Wholphin+ update feed, which publishes a build once it has been verified on the home Shield. The .aab is the Google Play build (TV only, updated by Play).' > ci_release_note.txt
 
           gh release create "${{ env.TAG_NAME }}" \
             --latest=false --prerelease --title "${{ env.VERSION_NAME }} (${{ env.BRANCH_NAME }})" --target "${{ env.BRANCH_NAME }}" -F ci_release_note.txt \
-            app/build/outputs/apk/**/*.apk
+            app/build/outputs/apk/**/*.apk app/build/outputs/bundle/**/*.aab

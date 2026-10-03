@@ -83,6 +83,12 @@ class SelfUpdater
         private val dir get() = File(context.noBackupFilesDir, "self-update")
         private val apk get() = File(dir, "update.apk")
 
+        /**
+         * Off when Google Play installed the app: Play updates it, and two updaters would fight.
+         * An ADB or Downloader install over it (Scuffed, sideloading) turns it back on.
+         */
+        private val active: Boolean by lazy { ENABLED && !isPlayInstaller(installerOf(context)) }
+
         @Volatile
         private var inForeground = false
 
@@ -91,7 +97,10 @@ class SelfUpdater
 
         /** Start the periodic background check, if this build updates itself */
         fun schedule() {
-            if (!ENABLED) return
+            if (!active) {
+                if (ENABLED) workManager.cancelUniqueWork(WORK_NAME)
+                return
+            }
             val request =
                 PeriodicWorkRequestBuilder<SelfUpdateWorker>(
                     CHECK_INTERVAL.toJavaDuration(),
@@ -105,7 +114,7 @@ class SelfUpdater
 
         /** The app came on screen */
         fun onForeground() {
-            if (!ENABLED) return
+            if (!active) return
             inForeground = true
             externalPlayback = false
             scope.launch(ExceptionHandler()) {
@@ -127,7 +136,7 @@ class SelfUpdater
          * would lose its progress reporting if the app restarted under it
          */
         fun onBackground(externalPlayback: Boolean) {
-            if (!ENABLED) return
+            if (!active) return
             inForeground = false
             this.externalPlayback = externalPlayback
             scope.launch(ExceptionHandler()) { maybeInstall() }
@@ -135,7 +144,7 @@ class SelfUpdater
 
         /** The periodic background check */
         suspend fun runScheduledCheck() {
-            if (!ENABLED) return
+            if (!active) return
             migrateUpdateUrl()
             download()
             maybeInstall()
@@ -398,6 +407,23 @@ class SelfUpdater
         companion object {
             /** Whether this build keeps itself up to date: personal fork builds only */
             val ENABLED = BuildConfig.SELF_UPDATE && BuildConfig.UPDATING_ENABLED
+
+            private const val PLAY_STORE = "com.android.vending"
+
+            fun isPlayInstaller(installer: String?) = installer == PLAY_STORE
+
+            /** The package that installed this app, eg the Play Store, or null for ADB */
+            fun installerOf(context: android.content.Context): String? =
+                try {
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+                        context.packageManager.getInstallSourceInfo(context.packageName).installingPackageName
+                    } else {
+                        @Suppress("DEPRECATION")
+                        context.packageManager.getInstallerPackageName(context.packageName)
+                    }
+                } catch (ex: Exception) {
+                    null
+                }
 
             const val WORK_NAME = "self-update"
             private const val PREFS_NAME = "self_update"
