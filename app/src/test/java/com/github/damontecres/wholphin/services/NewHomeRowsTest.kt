@@ -23,46 +23,48 @@ class NewHomeRowsTest {
     private fun library(
         id: UUID,
         daysOld: Long = 400,
-        tvShows: Boolean = false,
-    ) = LibraryView(id, tvShows, now.minus(daysOld, ChronoUnit.DAYS), HomeRowViewOptions())
+    ) = LibraryView(id, now.minus(daysOld, ChronoUnit.DAYS), HomeRowViewOptions())
 
     private fun row(id: UUID) = HomeRowConfig.RecentlyAdded(id)
 
     private val saved = listOf(HomeRowConfig.ContinueWatchingCombined(), row(movies), row(tv))
-    private val oldLibraries = listOf(library(movies), library(tv, tvShows = true), library(music))
+    private val oldLibraries = listOf(library(movies), library(tv), library(music))
+
+    // As Scuffed orders a seasonal library: right after TV, ahead of the rest
+    private val withHalloween = listOf(library(movies), library(tv), library(halloween, daysOld = 1), library(music))
 
     @Test
-    fun `a new seasonal library is added once, right after TV`() {
+    fun `a new seasonal library is added once, where it sits in the library order`() {
         val plan =
-            NewHomeRows.plan(saved, oldLibraries + library(halloween, daysOld = 1), emptyList(), Record(), now)
+            NewHomeRows.plan(saved, withHalloween, emptyList(), Record(), now)
         assertTrue(plan.changed)
         assertEquals(listOf(saved[0], row(movies), row(tv), row(halloween)), plan.rows)
         // Music was there before and has no row: most likely removed on purpose, so left alone
         assertFalse(plan.rows.contains(row(music)))
 
-        val again = NewHomeRows.plan(plan.rows, oldLibraries + library(halloween, daysOld = 1), emptyList(), plan.record, now)
+        val again = NewHomeRows.plan(plan.rows, withHalloween, emptyList(), plan.record, now)
         assertFalse("nothing more to add", again.changed)
     }
 
     @Test
     fun `a removed row stays removed`() {
-        val first = NewHomeRows.plan(saved, oldLibraries + library(halloween, daysOld = 1), emptyList(), Record(), now)
+        val first = NewHomeRows.plan(saved, withHalloween, emptyList(), Record(), now)
         // The user deletes the Halloween row in home settings
         val afterRemoval = first.rows - row(halloween)
-        val next = NewHomeRows.plan(afterRemoval, oldLibraries + library(halloween, daysOld = 1), emptyList(), first.record, now)
+        val next = NewHomeRows.plan(afterRemoval, withHalloween, emptyList(), first.record, now)
         assertFalse(next.changed)
         assertFalse(next.rows.contains(row(halloween)))
     }
 
     @Test
     fun `an added row hides while its library is switched off, and comes back`() {
-        val first = NewHomeRows.plan(saved, oldLibraries + library(halloween, daysOld = 1), emptyList(), Record(), now)
+        val first = NewHomeRows.plan(saved, withHalloween, emptyList(), Record(), now)
         val off = NewHomeRows.plan(first.rows, oldLibraries, emptyList(), first.record, now)
         assertFalse(off.changed)
         assertTrue("kept in settings", off.rows.contains(row(halloween)))
         assertFalse("but not shown", off.visible.contains(row(halloween)))
 
-        val on = NewHomeRows.plan(off.rows, oldLibraries + library(halloween, daysOld = 1), emptyList(), off.record, now)
+        val on = NewHomeRows.plan(off.rows, withHalloween, emptyList(), off.record, now)
         assertTrue(on.visible.contains(row(halloween)))
     }
 
@@ -90,5 +92,13 @@ class NewHomeRowsTest {
         val removed = first.rows.dropLast(1)
         val next = NewHomeRows.plan(removed, oldLibraries, games, first.record, now)
         assertFalse("removed games row stays removed", next.changed)
+    }
+
+    @Test
+    fun `a library first in the order goes before the next library's row`() {
+        val first = UUID.randomUUID()
+        val libraries = listOf(library(first, daysOld = 1), library(movies), library(tv))
+        val plan = NewHomeRows.plan(saved, libraries, emptyList(), Record(), now)
+        assertEquals(listOf(saved[0], row(first), row(movies), row(tv)), plan.rows)
     }
 }

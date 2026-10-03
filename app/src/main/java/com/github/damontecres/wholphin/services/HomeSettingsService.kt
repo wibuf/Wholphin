@@ -358,7 +358,6 @@ class HomeSettingsService
                         .map {
                             NewHomeRows.LibraryView(
                                 id = it.itemId,
-                                isTvShows = it.collectionType == CollectionType.TVSHOWS,
                                 createdAt = created[it.itemId],
                                 viewOptions = viewOptionsForCollectionType(it.collectionType),
                             )

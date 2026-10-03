@@ -1,5 +1,6 @@
 package com.github.damontecres.wholphin.games.ui
 
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.github.damontecres.wholphin.games.GameArtworkService
@@ -7,17 +8,23 @@ import com.github.damontecres.wholphin.games.MoonbaseGamesService
 import com.github.damontecres.wholphin.games.model.GameLibrary
 import com.github.damontecres.wholphin.games.model.GameSummary
 import com.github.damontecres.wholphin.games.model.GameSystem
+import com.github.damontecres.wholphin.services.BackdropService
 import com.github.damontecres.wholphin.services.NavigationManager
 import com.github.damontecres.wholphin.ui.nav.Destination
 import com.github.damontecres.wholphin.util.LoadingState
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import timber.log.Timber
 import javax.inject.Inject
+import kotlin.time.Duration.Companion.seconds
 
 data class GamesPageState(
     val loading: LoadingState = LoadingState.Pending,
@@ -114,7 +121,7 @@ class GamesViewModel
         fun openCores() = navigationManager.navigateTo(Destination.GameCores)
     }
 
-/** The home page's games row only needs to open things */
+/** The home page's games row: opens things, and puts the focused game behind the page */
 @HiltViewModel
 class GamesRowViewModel
     @Inject
@@ -122,11 +129,45 @@ class GamesRowViewModel
         val games: MoonbaseGamesService,
         val artwork: GameArtworkService,
         private val navigationManager: NavigationManager,
+        private val backdropService: BackdropService,
     ) : ViewModel() {
+        private var backdropJob: Job? = null
+
+        /**
+         * Shows the game's screenshot as the home backdrop, or none at all while it loads or if
+         * the game has none, rather than leaving the last movie's backdrop up behind a game
+         */
+        fun showBackdrop(
+            libraryId: String,
+            game: GameSummary,
+        ) {
+            backdropJob?.cancel()
+            backdropJob =
+                viewModelScope.launch {
+                    val kind = MoonbaseGamesService.ThumbKind.SNAP
+                    val key = GameArtworkService.artKey(libraryId, game.id, kind)
+                    val file =
+                        artwork.cached(libraryId, game.id, kind) ?: run {
+                            backdropService.clearBackdrop()
+                            artwork.ensure(libraryId, game.id, kind)
+                            withTimeoutOrNull(BACKDROP_WAIT) {
+                                artwork.artwork.mapNotNull { it[key] }.first()
+                            }
+                        }
+                    if (file != null) {
+                        backdropService.submit("game_${libraryId}_${game.id}", Uri.fromFile(file).toString())
+                    }
+                }
+        }
+
         fun open(
             libraryId: String,
             game: GameSummary,
         ) = navigationManager.navigateTo(Destination.GameDetail(libraryId, game.id))
 
         fun openLibrary(libraryId: String) = navigationManager.navigateTo(Destination.Games(libraryId))
+
+        private companion object {
+            val BACKDROP_WAIT = 10.seconds
+        }
     }

@@ -62,10 +62,9 @@ class NewHomeRows
             val added: Set<String> = emptySet(),
         )
 
-        /** A Jellyfin library the user can see now */
+        /** A Jellyfin library the user can see now, in the user's library order */
         data class LibraryView(
             val id: UUID,
-            val isTvShows: Boolean,
             val createdAt: Instant?,
             val viewOptions: HomeRowViewOptions,
         )
@@ -85,6 +84,30 @@ class NewHomeRows
             const val NEW_LIBRARY_WINDOW_DAYS = 30L
 
             private fun gameKey(id: String) = "game:$id"
+
+            /**
+             * Where a new library's row goes: after the row of the nearest library before it in
+             * the user's library order (Jellyfin's OrderedViews, which is where Scuffed puts a
+             * seasonal library), else before the nearest one after it, else at the end
+             */
+            private fun insertAt(
+                rows: List<HomeRowConfig>,
+                libraries: List<LibraryView>,
+                id: UUID,
+            ): Int {
+                fun rowOf(libraryId: UUID) = rows.indexOfLast { (it as? HomeRowConfig.RecentlyAdded)?.parentId == libraryId }
+                val position = libraries.indexOfFirst { it.id == id }
+                libraries
+                    .take(position)
+                    .asReversed()
+                    .firstNotNullOfOrNull { library -> rowOf(library.id).takeIf { it >= 0 } }
+                    ?.let { return it + 1 }
+                libraries
+                    .drop(position + 1)
+                    .firstNotNullOfOrNull { library -> rowOf(library.id).takeIf { it >= 0 } }
+                    ?.let { return it }
+                return rows.size
+            }
 
             fun plan(
                 rows: List<HomeRowConfig>,
@@ -112,11 +135,7 @@ class NewHomeRows
                     val recent = library.createdAt?.isAfter(newSince) == true
                     offered += key
                     if (!record.baselined && !recent) continue
-                    // After the last TV row, which is where Scuffed puts a seasonal library
-                    val row = HomeRowConfig.RecentlyAdded(library.id, library.viewOptions)
-                    val tvIds = libraries.filter { it.isTvShows }.map { it.id }.toSet()
-                    val afterTv = result.indexOfLast { (it as? HomeRowConfig.RecentlyAdded)?.parentId in tvIds }
-                    if (afterTv >= 0) result.add(afterTv + 1, row) else result.add(row)
+                    result.add(insertAt(result, libraries, library.id), HomeRowConfig.RecentlyAdded(library.id, library.viewOptions))
                     added += key
                 }
 

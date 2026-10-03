@@ -199,7 +199,12 @@ fun GamesHomeRow(
                     modifier =
                         cardModifier
                             .width(height * AspectRatios.TALL)
-                            .onFocusChanged { if (it.isFocused) onFocusPosition(index) },
+                            .onFocusChanged {
+                                if (it.isFocused) {
+                                    onFocusPosition(index)
+                                    viewModel.showBackdrop(row.libraryId, game)
+                                }
+                            },
                 )
             }
         },
