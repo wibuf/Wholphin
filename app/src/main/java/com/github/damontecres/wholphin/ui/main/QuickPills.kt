@@ -41,6 +41,7 @@ import androidx.tv.material3.Text
 import coil3.compose.AsyncImage
 import com.github.damontecres.wholphin.data.ServerRepository
 import com.github.damontecres.wholphin.services.BackdropService
+import com.github.damontecres.wholphin.services.LibraryMatch
 import com.github.damontecres.wholphin.services.NavigationManager
 import com.github.damontecres.wholphin.services.OnNow
 import com.github.damontecres.wholphin.services.QuickPillsService
@@ -51,15 +52,20 @@ import com.github.damontecres.wholphin.ui.components.TitleOrLogo
 import com.github.damontecres.wholphin.ui.launchIO
 import com.github.damontecres.wholphin.ui.nav.Destination
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import org.jellyfin.sdk.model.api.CollectionType
 import java.time.Duration
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
+import java.util.UUID
 import javax.inject.Inject
 
 /** Loads the signed-in user's quick pills for the home page, and does what they're pressed for */
@@ -106,17 +112,66 @@ class QuickPillsViewModel
                         _ready.value = true
                     }
                     _pills.value = quickPillsService.refresh(user.id, user.tvAccess)
+                    _ready.value = true
+                    addLibraryArt(user.id)
                 } finally {
                     _ready.value = true
                 }
             }
         }
 
+        private var focusedChannel: UUID? = null
+
+        /**
+         * Art and episode details from the library for what's on, looked up only now the row is up,
+         * all channels at once, so the home page never waits for them
+         */
+        private suspend fun addLibraryArt(userId: UUID) {
+            coroutineScope {
+                _pills.value
+                    .filterIsInstance<ResolvedPill.Channel>()
+                    .filter { it.onNow != null }
+                    .map { pill -> async { pill.channelId to quickPillsService.libraryMatch(userId, pill.onNow!!) } }
+                    .awaitAll()
+                    .filter { it.second != null }
+                    .forEach { (channelId, match) -> applyMatch(channelId, match!!) }
+            }
+        }
+
+        private suspend fun applyMatch(
+            channelId: UUID,
+            match: LibraryMatch,
+        ) {
+            _pills.update { pills ->
+                pills.map { pill ->
+                    if (pill is ResolvedPill.Channel && pill.channelId == channelId && pill.onNow != null) {
+                        pill.copy(
+                            onNow =
+                                pill.onNow.copy(
+                                    imageUrl = match.backdropUrl ?: pill.onNow.imageUrl,
+                                    logoUrl = match.logoUrl,
+                                    episodeTitle = pill.onNow.episodeTitle ?: match.episodeTitle,
+                                    overview = match.overview ?: pill.onNow.overview,
+                                ),
+                        )
+                    } else {
+                        pill
+                    }
+                }
+            }
+            // Already looking at it: swap the stock art for the real thing
+            if (focusedChannel == channelId) {
+                match.backdropUrl?.let { backdropService.submit("pill_$channelId", it) }
+            }
+        }
+
         fun onFocus(pill: ResolvedPill) {
+            if (pill !is ResolvedPill.Channel) focusedChannel = null
             viewModelScope.launch {
                 when (pill) {
                     is ResolvedPill.Channel -> {
-                        val art = pill.artUri
+                        focusedChannel = pill.channelId
+                        val art = pill.onNow?.imageUrl ?: pill.artUri
                         if (art != null) backdropService.submit("pill_${pill.channelId}", art) else backdropService.clearBackdrop()
                     }
 
@@ -296,8 +351,8 @@ fun QuickPillHeader(
                 }
                 TitleOrLogo(
                     title = onNow?.title ?: pill.channelName.ifBlank { pill.label },
-                    logoImageUrl = null,
-                    showLogo = false,
+                    logoImageUrl = onNow?.logoUrl,
+                    showLogo = showLogo && onNow?.logoUrl != null,
                     modifier = Modifier.fillMaxWidth(.75f),
                 )
                 Text(
@@ -379,8 +434,11 @@ internal fun channelMeta(
             ?.let { Duration.between(now, it).toMinutes() }
             ?.takeIf { it >= 0 }
             ?.let { "$it min left" }
+    val seasonEpisode =
+        if (onNow.season != null && onNow.episode != null) "S${onNow.season} E${onNow.episode}" else null
     return listOfNotNull(
         pill.channelName.ifBlank { null },
+        seasonEpisode,
         onNow.episodeTitle,
         "New".takeIf { onNow.isNew },
         times,

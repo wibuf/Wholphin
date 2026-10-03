@@ -10,11 +10,14 @@ import kotlinx.serialization.builtins.MapSerializer
 import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
 import org.jellyfin.sdk.api.client.ApiClient
+import org.jellyfin.sdk.api.client.extensions.itemsApi
 import org.jellyfin.sdk.api.client.extensions.liveTvApi
+import org.jellyfin.sdk.api.client.extensions.tvShowsApi
 import org.jellyfin.sdk.model.api.BaseItemDto
 import org.jellyfin.sdk.model.api.BaseItemKind
 import org.jellyfin.sdk.model.api.CollectionType
 import org.jellyfin.sdk.model.api.ImageType
+import org.jellyfin.sdk.model.api.ItemFields
 import org.jellyfin.sdk.model.api.request.GetLiveTvChannelsRequest
 import org.jellyfin.sdk.model.api.request.GetLiveTvProgramsRequest
 import org.jellyfin.sdk.model.serializer.toUUIDOrNull
@@ -207,6 +210,93 @@ class QuickPillsService
                 start = dto.startDate,
                 end = dto.endDate,
                 imageUrl = null,
+                season = dto.parentIndexNumber,
+                episode = dto.indexNumber,
+            )
+        }
+
+        private val libraryCache = java.util.concurrent.ConcurrentHashMap<String, LibraryMatch>()
+
+        /**
+         * Art and episode details for what's on, from the same show or movie in the library: the
+         * guide data has no images. Run after the row is drawn, never before; results are kept for
+         * the rest of the session. Null when there's no match.
+         */
+        suspend fun libraryMatch(
+            userId: UUID,
+            onNow: OnNow,
+        ): LibraryMatch? {
+            val key = "${onNow.title.lowercase()}|${onNow.season}|${onNow.episode}"
+            libraryCache[key]?.let { return it.takeIf { m -> m.found } }
+            val match =
+                try {
+                    findInLibrary(userId, onNow)
+                } catch (ex: Exception) {
+                    Timber.d(ex, "No library match for %s", onNow.title)
+                    null
+                }
+            libraryCache[key] = match ?: LibraryMatch.NONE
+            return match
+        }
+
+        private suspend fun findInLibrary(
+            userId: UUID,
+            onNow: OnNow,
+        ): LibraryMatch? {
+            if (onNow.title.isBlank()) return null
+            val item =
+                api.itemsApi
+                    .getItems(
+                        userId = userId,
+                        searchTerm = onNow.title,
+                        includeItemTypes = listOf(BaseItemKind.SERIES, BaseItemKind.MOVIE),
+                        recursive = true,
+                        limit = 5,
+                    ).content.items
+                    .firstOrNull { it.name.equals(onNow.title, ignoreCase = true) }
+                    ?: return null
+            val backdrop =
+                if (!item.backdropImageTags.isNullOrEmpty()) {
+                    imageUrlService.getItemImageUrl(
+                        item.id,
+                        ImageType.BACKDROP,
+                        maxWidth = 1280,
+                    )
+                } else {
+                    null
+                }
+            val logo =
+                if (item.imageTags?.get(ImageType.LOGO) !=
+                    null
+                ) {
+                    imageUrlService.getItemImageUrl(item.id, ImageType.LOGO, maxHeight = 160)
+                } else {
+                    null
+                }
+            // The exact episode, when the guide says which one
+            val episode =
+                if (item.type == BaseItemKind.SERIES && onNow.season != null && onNow.episode != null) {
+                    api.tvShowsApi
+                        .getEpisodes(
+                            seriesId = item.id,
+                            userId = userId,
+                            season = onNow.season,
+                            fields = listOf(ItemFields.OVERVIEW),
+                        ).content.items
+                        .firstOrNull { it.indexNumber == onNow.episode }
+                } else {
+                    null
+                }
+            val still =
+                episode?.takeIf { it.imageTags?.get(ImageType.PRIMARY) != null }?.let {
+                    imageUrlService.getItemImageUrl(it.id, ImageType.PRIMARY, maxWidth = 1280)
+                }
+            return LibraryMatch(
+                found = true,
+                backdropUrl = backdrop ?: still,
+                logoUrl = logo,
+                episodeTitle = episode?.name,
+                overview = episode?.overview,
             )
         }
 
@@ -310,7 +400,24 @@ data class OnNow(
     val start: LocalDateTime?,
     val end: LocalDateTime?,
     val imageUrl: String?,
+    val season: Int? = null,
+    val episode: Int? = null,
+    /** The show's logo, when it's in the library */
+    val logoUrl: String? = null,
 )
+
+/** What the library knows about a programme */
+data class LibraryMatch(
+    val found: Boolean,
+    val backdropUrl: String? = null,
+    val logoUrl: String? = null,
+    val episodeTitle: String? = null,
+    val overview: String? = null,
+) {
+    companion object {
+        val NONE = LibraryMatch(found = false)
+    }
+}
 
 sealed interface ResolvedPill {
     val label: String
