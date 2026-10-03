@@ -16,6 +16,7 @@ import dagger.hilt.components.SingletonComponent
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import org.jellyfin.sdk.Jellyfin
 import org.jellyfin.sdk.android.androidDevice
@@ -108,8 +109,16 @@ object AppModule {
         .newBuilder()
         .addInterceptor {
             val request = it.request()
+            // Only the Jellyfin server gets the user's token: images from anywhere else (TMDB for
+            // Discover and quick pills) go through this client too
+            val server =
+                serverRepository.current.value
+                    ?.server
+                    ?.url
+                    ?.toHttpUrlOrNull()
+            val toServer = server != null && request.url.host == server.host && request.url.port == server.port
             val newRequest =
-                serverRepository.current.value?.user?.accessToken?.let { token ->
+                serverRepository.current.value?.user?.accessToken?.takeIf { toServer }?.let { token ->
                     request
                         .newBuilder()
                         .addHeader(

@@ -1,14 +1,21 @@
 package com.github.damontecres.wholphin.services
 
 import android.content.Context
+import com.github.damontecres.wholphin.BuildConfig
 import com.github.damontecres.wholphin.R
 import com.github.damontecres.wholphin.data.model.BaseItem
+import com.github.damontecres.wholphin.services.hilt.StandardOkHttpClient
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.MapSerializer
 import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
+import okhttp3.OkHttpClient
+import okhttp3.Request
 import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.api.client.extensions.itemsApi
 import org.jellyfin.sdk.api.client.extensions.liveTvApi
@@ -48,6 +55,7 @@ class QuickPillsService
         private val navDrawerService: NavDrawerService,
         private val latestNextUpService: LatestNextUpService,
         private val imageUrlService: ImageUrlService,
+        @param:StandardOkHttpClient private val okHttpClient: OkHttpClient,
     ) {
         private val prefs by lazy { context.getSharedPreferences("fork_quick_pills", Context.MODE_PRIVATE) }
         private val idMap = MapSerializer(String.serializer(), String.serializer())
@@ -212,7 +220,42 @@ class QuickPillsService
                 imageUrl = null,
                 season = dto.parentIndexNumber,
                 episode = dto.indexNumber,
+                isMovie = dto.isMovie == true,
             )
+        }
+
+        /**
+         * Art from TMDB, through Scuffed (which holds the TMDB key and caches the answers), for
+         * what's on but not in the library, eg a Hallmark movie. GooseFlix builds only.
+         */
+        private suspend fun tmdbArt(onNow: OnNow): LibraryMatch? {
+            val base = SCUFFED_URL ?: return null
+            val type =
+                when {
+                    onNow.isMovie -> "movie"
+                    onNow.season != null -> "tv"
+                    else -> ""
+                }
+            val url =
+                base
+                    .toHttpUrlOrNull()
+                    ?.newBuilder()
+                    ?.addPathSegments("api/gooseflix/art")
+                    ?.addQueryParameter("title", onNow.title)
+                    ?.addQueryParameter("type", type)
+                    ?.build() ?: return null
+            return try {
+                withContext(Dispatchers.IO) {
+                    okHttpClient.newCall(Request.Builder().url(url).build()).execute().use { response ->
+                        if (!response.isSuccessful) return@use null
+                        val art = artJson.decodeFromString<TmdbArt>(response.body.string())
+                        LibraryMatch(found = true, backdropUrl = art.backdrop, logoUrl = art.logo)
+                    }
+                }
+            } catch (ex: Exception) {
+                Timber.d(ex, "No TMDB art for %s", onNow.title)
+                null
+            }
         }
 
         private val libraryCache = java.util.concurrent.ConcurrentHashMap<String, LibraryMatch>()
@@ -234,7 +277,7 @@ class QuickPillsService
                 } catch (ex: Exception) {
                     Timber.d(ex, "No library match for %s", onNow.title)
                     null
-                }
+                } ?: tmdbArt(onNow)
             libraryCache[key] = match ?: LibraryMatch.NONE
             return match
         }
@@ -349,6 +392,11 @@ class QuickPillsService
             }
 
             private val json = Json { ignoreUnknownKeys = true }
+            private val artJson = Json { ignoreUnknownKeys = true }
+
+            /** Scuffed, which also serves the app's updates; null outside GooseFlix builds */
+            private val SCUFFED_URL: String? =
+                BuildConfig.DEFAULT_UPDATE_URL.takeIf { BuildConfig.GOOSEFLIX }?.substringBefore("/update")
 
             fun parseConfig(text: String): QuickPillsConfig? =
                 runCatching { json.decodeFromString<QuickPillsConfig>(text) }
@@ -404,6 +452,13 @@ data class OnNow(
     val episode: Int? = null,
     /** The show's logo, when it's in the library */
     val logoUrl: String? = null,
+    val isMovie: Boolean = false,
+)
+
+@Serializable
+private data class TmdbArt(
+    val backdrop: String? = null,
+    val logo: String? = null,
 )
 
 /** What the library knows about a programme */
