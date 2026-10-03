@@ -37,6 +37,9 @@ import com.github.damontecres.wholphin.ui.components.AppScreensaver
 import com.github.damontecres.wholphin.ui.nav.ApplicationContent
 import com.github.damontecres.wholphin.ui.setup.SwitchServerContent
 import com.github.damontecres.wholphin.ui.setup.SwitchUserContent
+import com.github.damontecres.wholphin.ui.setup.home.HomeServer
+import com.github.damontecres.wholphin.ui.setup.home.HomeServerContent
+import com.github.damontecres.wholphin.ui.setup.home.HomeSignInContent
 import com.github.damontecres.wholphin.ui.util.InterfaceCustomization
 import com.github.damontecres.wholphin.ui.util.LocalInterfaceCustomization
 
@@ -86,14 +89,25 @@ fun MainContent(
                             }
 
                             SetupDestination.ServerList -> {
-                                SwitchServerContent(Modifier.fillMaxSize())
+                                if (HomeServer.enabled) {
+                                    HomeServerContent(Modifier.fillMaxSize())
+                                } else {
+                                    SwitchServerContent(Modifier.fillMaxSize())
+                                }
                             }
 
                             is SetupDestination.UserList -> {
-                                SwitchUserContent(
-                                    server = key.server,
-                                    Modifier.fillMaxSize(),
-                                )
+                                if (HomeServer.enabled) {
+                                    HomeSignInContent(
+                                        server = key.server,
+                                        Modifier.fillMaxSize(),
+                                    )
+                                } else {
+                                    SwitchUserContent(
+                                        server = key.server,
+                                        Modifier.fillMaxSize(),
+                                    )
+                                }
                             }
 
                             is SetupDestination.AppContent -> {

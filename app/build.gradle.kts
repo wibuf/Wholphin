@@ -93,6 +93,13 @@ configure<ApplicationExtension> {
             }
         buildConfigField("String", "DEFAULT_UPDATE_URL", "\"$updateUrl\"")
         buildConfigField("boolean", "SELF_UPDATE", forkBuild.toString())
+
+        // Fork builds are GooseFlix: blue by default, and signed in to one built-in server
+        // with no server setup. An empty HOME_SERVER_URL keeps upstream's server screens.
+        val homeServerUrl =
+            if (forkBuild) providers.gradleProperty("forkHomeServerUrl").getOrElse("https://jelly.grit.bot") else ""
+        buildConfigField("boolean", "GOOSEFLIX", forkBuild.toString())
+        buildConfigField("String", "HOME_SERVER_URL", "\"$homeServerUrl\"")
     }
 
     signingConfigs {
@@ -223,13 +230,13 @@ configure<ApplicationExtension> {
         getByName("main") {
             kotlin.directories += "$buildDir/generated/seerr_api/src/main/kotlin"
         }
-        // Personal fork builds (-PforkBuild) relabel the launcher entry so the
-        // side-by-side install is tellable apart from the official app. Build
-        // type resources win over main, so this overrides app_name rather than
-        // colliding with it, and no shared file has to be touched.
+        // Personal fork builds (-PforkBuild) carry the GooseFlix name and artwork. Flavour
+        // resources win over main, so these override rather than collide, and no shared file
+        // has to be touched. They sit on the flavours, not the build types, because the debug
+        // build type has its own app_name: there it wins, where on the same source set the
+        // two would be duplicates and the build would fail.
         if (project.hasProperty("forkBuild")) {
-            getByName("release") { res.srcDir("src/fork/res") }
-            getByName("debug") { res.srcDir("src/fork/res") }
+            listOf("default", "appstore", "firetv").forEach { getByName(it) { res.srcDir("src/fork/res") } }
         }
     }
 
@@ -444,4 +451,8 @@ dependencies {
     androidTestImplementation(libs.mockk.android)
     androidTestImplementation(libs.hilt.android.testing)
     androidTestImplementation(libs.androidx.compose.ui.test.manifest)
+
+    // Fork: draws the GooseFlix sign-in QR code, which carries the live Quick Connect code.
+    // Kept out of the version catalog so upstream's catalog stays untouched.
+    implementation("com.google.zxing:core:3.5.3")
 }

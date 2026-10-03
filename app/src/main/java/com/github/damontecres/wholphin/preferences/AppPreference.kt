@@ -493,7 +493,7 @@ sealed interface AppPreference<Pref, T> {
         val ThemeColors =
             AppChoicePreference<AppPreferences, AppThemeColors>(
                 title = R.string.app_theme,
-                defaultValue = AppThemeColors.PURPLE,
+                defaultValue = if (BuildConfig.GOOSEFLIX) AppThemeColors.BLUE else AppThemeColors.PURPLE,
                 getter = { it.interfacePreferences.appThemeColors },
                 setter = { prefs, value ->
                     prefs.updateInterfacePreferences { appThemeColors = value }
@@ -680,7 +680,7 @@ sealed interface AppPreference<Pref, T> {
         val SubtitlePreferredKeywords =
             AppStringPreference<AppPreferences>(
                 title = R.string.subtitle_preferred_keywords,
-                defaultValue = "",
+                defaultValue = if (BuildConfig.GOOSEFLIX) "full, dialogue" else "",
                 getter = { it.playbackPreferences.subtitlePreferredKeywords },
                 setter = { prefs, value ->
                     prefs.updatePlaybackPreferences { subtitlePreferredKeywords = value.trim() }
@@ -691,7 +691,7 @@ sealed interface AppPreference<Pref, T> {
         val SubtitleAvoidedKeywords =
             AppStringPreference<AppPreferences>(
                 title = R.string.subtitle_avoided_keywords,
-                defaultValue = "",
+                defaultValue = if (BuildConfig.GOOSEFLIX) "signs, songs, commentary" else "",
                 getter = { it.playbackPreferences.subtitleAvoidedKeywords },
                 setter = { prefs, value ->
                     prefs.updatePlaybackPreferences { subtitleAvoidedKeywords = value.trim() }

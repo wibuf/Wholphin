@@ -69,6 +69,7 @@ class GameArtworkService
 
         // When the server said there is no art, so it is not asked again for a while
         private val missingAt = HashMap<Key, Long>()
+
         // One token per queued item so both workers wake for a bulk prefetch; a worker drains
         // the queue past its own token anyway, so surplus tokens are harmless
         private val signal = Channel<Unit>(Channel.UNLIMITED)

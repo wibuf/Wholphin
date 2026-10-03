@@ -2,8 +2,12 @@
 <resources>
     <!--
         Fork builds only (-PforkBuild). These override the values in
-        src/main/res, so the personal build is distinguishable from the official
-        app it installs alongside.
+        src/main/res, so the GooseFlix build carries its own name and is
+        distinguishable from the official app it installs alongside.
     -->
-    <string name="app_name" translatable="false">Wholphin+</string>
+    <string name="app_name" translatable="false">GooseFlix</string>
+    <string name="app_name_long" translatable="false">GooseFlix</string>
+    <string name="display_preset_default">GooseFlix Default</string>
+    <string name="display_preset_compact">GooseFlix Compact</string>
+    <string name="updated_toast">GooseFlix updated to %s</string>
 </resources>

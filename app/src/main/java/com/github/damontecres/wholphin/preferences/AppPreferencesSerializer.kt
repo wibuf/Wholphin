@@ -56,6 +56,9 @@ class AppPreferencesSerializer
                                 resolutionSwitching = AppPreference.ResolutionSwitching.defaultValue
                                 cinemaMode = AppPreference.CinemaMode.defaultValue
                                 dpadSeekMode = AppPreference.DpadSeekModePref.defaultValue
+                                subtitlePreferredKeywords =
+                                    AppPreference.SubtitlePreferredKeywords.defaultValue
+                                subtitleAvoidedKeywords = AppPreference.SubtitleAvoidedKeywords.defaultValue
 
                                 overrides =
                                     PlaybackOverrides
