@@ -5,8 +5,10 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import org.jellyfin.sdk.api.client.ApiClient
+import org.jellyfin.sdk.api.client.extensions.itemsApi
 import org.jellyfin.sdk.api.client.extensions.liveTvApi
 import org.jellyfin.sdk.model.api.BaseItemDto
+import org.jellyfin.sdk.model.api.BaseItemKind
 import org.jellyfin.sdk.model.api.CollectionType
 import org.jellyfin.sdk.model.api.ImageType
 import org.jellyfin.sdk.model.api.request.GetLiveTvChannelsRequest
@@ -101,7 +103,7 @@ class QuickPillsService
                             channelId = channel.id,
                             channelName = channel.name.orEmpty(),
                             logoUrl = imageUrlService.getItemImageUrl(channel.id, ImageType.PRIMARY, maxHeight = 96),
-                            onNow = channel.currentProgram?.let(::program),
+                            onNow = channel.currentProgram?.let { program(userId, it) },
                         )
                     }
 
@@ -113,18 +115,58 @@ class QuickPillsService
             }
         }
 
-        private fun program(dto: BaseItemDto): OnNow {
-            val imageType =
+        /**
+         * What's on, with artwork: the guide data has none, so it comes from the same show or
+         * movie in the library when there is one (eg "Chicago Fire"), else none
+         */
+        private suspend fun program(
+            userId: UUID,
+            dto: BaseItemDto,
+        ): OnNow {
+            val (title, isNew) = cleanProgramTitle(dto.name.orEmpty())
+            val ownImage =
                 listOf(ImageType.THUMB, ImageType.BACKDROP, ImageType.PRIMARY)
                     .firstOrNull { dto.imageTags?.get(it) != null || (it == ImageType.BACKDROP && !dto.backdropImageTags.isNullOrEmpty()) }
+                    ?.let { imageUrlService.getItemImageUrl(dto.id, it, maxWidth = 1280) }
             return OnNow(
-                title = dto.name.orEmpty(),
+                title = title,
+                isNew = isNew,
                 episodeTitle = dto.episodeTitle,
                 overview = dto.overview,
                 start = dto.startDate,
                 end = dto.endDate,
-                imageUrl = imageType?.let { imageUrlService.getItemImageUrl(dto.id, it, maxWidth = 1280) },
+                imageUrl = ownImage ?: libraryBackdrop(userId, title),
             )
+        }
+
+        private val backdropCache = mutableMapOf<String, String?>()
+
+        /** A backdrop from the series or movie in the library with exactly this title, if any */
+        private suspend fun libraryBackdrop(
+            userId: UUID,
+            title: String,
+        ): String? {
+            if (title.isBlank()) return null
+            backdropCache[title]?.let { return it }
+            if (title in backdropCache) return null
+            val url =
+                try {
+                    api.itemsApi
+                        .getItems(
+                            userId = userId,
+                            searchTerm = title,
+                            includeItemTypes = listOf(BaseItemKind.SERIES, BaseItemKind.MOVIE),
+                            recursive = true,
+                            limit = 5,
+                        ).content.items
+                        .firstOrNull { it.name.equals(title, ignoreCase = true) && !it.backdropImageTags.isNullOrEmpty() }
+                        ?.let { imageUrlService.getItemImageUrl(it.id, ImageType.BACKDROP, maxWidth = 1280) }
+                } catch (ex: Exception) {
+                    Timber.d(ex, "No library match for %s", title)
+                    null
+                }
+            backdropCache[title] = url
+            return url
         }
 
         /** The newest thing in Continue Watching, else the first Next Up */
@@ -148,6 +190,18 @@ class QuickPillsService
             const val DISPLAY_PREFS_ID = "gooseflix"
             const val CLIENT = "gooseflix"
             const val PREF_KEY = "quickPills"
+
+            /**
+             * The title without the guide's superscript "ᴺᵉʷ" marker, and whether it had one:
+             * "7 News Today  ᴺᵉʷ" is ("7 News Today", true)
+             */
+            fun cleanProgramTitle(raw: String): Pair<String, Boolean> {
+                fun isMarker(c: Char) = c in '\u02B0'..'\u02FF' || c in '\u1D00'..'\u1DBF'
+                val marker = raw.filter(::isMarker)
+                val title = raw.filterNot(::isMarker).trim()
+                // ᴺᵉʷ: superscript capital N. Guides also mark "ᴸᶦᵛᵉ", which isn't "new"
+                return title to marker.startsWith('\u1D3A')
+            }
 
             private val json = Json { ignoreUnknownKeys = true }
 
@@ -188,6 +242,8 @@ data class QuickPill(
 /** What's airing on a channel now */
 data class OnNow(
     val title: String,
+    /** The guide marks it as a new episode */
+    val isNew: Boolean = false,
     val episodeTitle: String?,
     val overview: String?,
     val start: LocalDateTime?,

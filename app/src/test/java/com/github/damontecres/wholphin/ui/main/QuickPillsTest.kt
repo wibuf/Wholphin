@@ -55,4 +55,15 @@ class QuickPillsTest {
         assertEquals(0.6f, progress(onNow, now)!!, 0.001f)
         assertNull(progress(onNow.copy(end = null), now))
     }
+
+    @Test
+    fun `the guide's New marker becomes a flag`() {
+        assertEquals("7 News Today in New England" to true, QuickPillsService.cleanProgramTitle("7 News Today in New England  ᴺᵉʷ"))
+        assertEquals("Chicago Fire" to false, QuickPillsService.cleanProgramTitle("Chicago Fire"))
+        assertEquals("Patriots vs. Bills" to false, QuickPillsService.cleanProgramTitle("Patriots vs. Bills ᴸᶦᵛᵉ"))
+        val now = LocalDateTime.of(2026, 10, 3, 17, 18)
+        val onNow = OnNow("7 News", isNew = true, episodeTitle = null, overview = null, start = null, end = null, imageUrl = null)
+        val pill = ResolvedPill.Channel("7 News", "807", UUID.randomUUID(), "WHDH", null, onNow)
+        assertEquals("WHDH · New", channelMeta(pill, onNow, now))
+    }
 }

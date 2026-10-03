@@ -319,15 +319,11 @@ fun HomePageContent(
     }
     var focusedPill by remember { mutableStateOf<ResolvedPill?>(null) }
     val pillsFocusRequester = remember { FocusRequester() }
-    var pillsTookFocus by rememberSaveable { mutableStateOf(false) }
-    if (takeFocus) {
-        LaunchedEffect(pills.isNotEmpty()) {
-            if (pills.isNotEmpty() && !pillsTookFocus) {
-                pillsTookFocus = pillsFocusRequester.tryRequestFocus()
-                listState.scrollToItem(0)
-            }
-        }
-    }
+    val pillsReady by (pillsViewModel?.ready ?: remember { MutableStateFlow(true) }).collectAsState()
+    // Where focus goes when the page (re)appears: the pills on first open, and again after
+    // coming back from something opened with a pill (Guide, a channel)
+    var lastFocusOnPills by rememberSaveable { mutableStateOf(true) }
+    val pillsOffset = if (pills.isNotEmpty()) 1 else 0
 
     val focusedItem =
         remember(homeRows, position) {
@@ -344,7 +340,13 @@ fun HomePageContent(
     val currentOnClickPlay by rememberUpdatedState(onClickPlay)
 
     if (takeFocus) {
-        LaunchedEffect(homeRows) {
+        LaunchedEffect(homeRows, pillsReady) {
+            // Wait to learn whether there are pills, or rows would take focus first and keep it
+            if (!pillsReady) return@LaunchedEffect
+            if (!firstFocused && pills.isNotEmpty() && lastFocusOnPills) {
+                firstFocused = pillsFocusRequester.tryRequestFocus()
+                listState.scrollToItem(0)
+            }
             if (!firstFocused && homeRows.isNotEmpty()) {
                 if (position.row >= 0) {
                     val index = position.row.coerceIn(0, rowFocusRequesters.lastIndex)
@@ -358,7 +360,7 @@ fun HomePageContent(
                             rowFocusRequesters[it].tryRequestFocus()
                             firstFocused = true
                             delay(50)
-                            listState.scrollToItem(it)
+                            listState.scrollToItem(it + pillsOffset)
                         }
                 }
             }
@@ -387,7 +389,7 @@ fun HomePageContent(
                 }
             val pill = focusedPill
             if (pill != null) {
-                QuickPillHeader(pill, showLogo, HeaderUtils.modifier)
+                QuickPillHeader(pill, pills, showLogo, HeaderUtils.modifier)
             } else if (focusedGame != null) {
                 GameHomeHeader(focusedGame.first, focusedGame.second, HeaderUtils.modifier)
             } else {
@@ -423,6 +425,7 @@ fun HomePageContent(
                                 pills = pills,
                                 onFocusPill = {
                                     focusedPill = it
+                                    lastFocusOnPills = true
                                     pillsViewModel?.onFocus(it)
                                 },
                                 onClickPill = { pillsViewModel?.onClick(it) },
@@ -439,6 +442,7 @@ fun HomePageContent(
                             Modifier
                                 .animateItem(placementSpec = null)
                                 .padding(bottom = 8.dp)
+                                .onFocusChanged { if (it.hasFocus) lastFocusOnPills = false }
                         CompositionLocalProvider(
                             LocalBringIntoViewSpec provides defaultBringIntoViewSpec,
                         ) {

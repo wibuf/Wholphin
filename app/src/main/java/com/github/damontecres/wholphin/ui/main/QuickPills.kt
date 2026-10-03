@@ -75,6 +75,10 @@ class QuickPillsViewModel
         private val _pills = MutableStateFlow<List<ResolvedPill>>(emptyList())
         val pills: StateFlow<List<ResolvedPill>> = _pills
 
+        /** True once the first load has finished, so the home page knows where to put focus */
+        private val _ready = MutableStateFlow(false)
+        val ready: StateFlow<Boolean> = _ready
+
         /** Called whenever the home page comes back, since what's on will have moved on */
         fun load() {
             viewModelScope.launchIO {
@@ -83,12 +87,16 @@ class QuickPillsViewModel
                         .getCurrent()
                         .appPreferences.homePagePreferences.hideQuickPills
                 val user = serverRepository.currentUserDto
-                if (hidden || user == null) {
-                    _pills.value = emptyList()
-                    return@launchIO
+                try {
+                    if (hidden || user == null) {
+                        _pills.value = emptyList()
+                        return@launchIO
+                    }
+                    val config = quickPillsService.configFor(user.id)
+                    _pills.value = quickPillsService.resolve(user.id, user.tvAccess, config)
+                } finally {
+                    _ready.value = true
                 }
-                val config = quickPillsService.configFor(user.id)
-                _pills.value = quickPillsService.resolve(user.id, user.tvAccess, config)
             }
         }
 
@@ -105,7 +113,12 @@ class QuickPillsViewModel
                     }
 
                     is ResolvedPill.Guide -> {
-                        backdropService.clearBackdrop()
+                        // The guide has no art of its own: borrow what's on one of the channels
+                        val art =
+                            pills.value
+                                .filterIsInstance<ResolvedPill.Channel>()
+                                .firstNotNullOfOrNull { it.onNow?.imageUrl }
+                        if (art != null) backdropService.submit("pill_guide", art) else backdropService.clearBackdrop()
                     }
                 }
             }
@@ -174,26 +187,7 @@ private fun QuickPillChip(
         ) {
             when (pill) {
                 is ResolvedPill.Channel -> {
-                    Box(
-                        contentAlignment = Alignment.Center,
-                        modifier =
-                            Modifier
-                                .size(width = 56.dp, height = 36.dp)
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(Color.White)
-                                .padding(3.dp),
-                    ) {
-                        if (pill.logoUrl != null) {
-                            AsyncImage(
-                                model = pill.logoUrl,
-                                contentDescription = null,
-                                contentScale = ContentScale.Fit,
-                                modifier = Modifier.fillMaxWidth(),
-                            )
-                        } else {
-                            Text(pill.number, color = Color(0xFF0D1018), fontWeight = FontWeight.Bold)
-                        }
-                    }
+                    StationLogo(pill, Modifier.size(width = 56.dp, height = 36.dp))
                 }
 
                 is ResolvedPill.Guide -> {
@@ -235,94 +229,123 @@ private fun PillIcon(
 @Composable
 fun QuickPillHeader(
     pill: ResolvedPill,
+    allPills: List<ResolvedPill>,
     showLogo: Boolean,
     modifier: Modifier = Modifier,
 ) {
+    val now = LocalDateTime.now()
     when (pill) {
         is ResolvedPill.Resume -> {
             HomePageHeader(item = pill.item, showLogo = showLogo, modifier = modifier)
         }
 
         is ResolvedPill.Guide -> {
-            HeaderText(
-                eyebrow = null,
-                title = "TV Guide",
-                meta = "See what's on every channel",
-                overview = null,
-                progress = null,
-                modifier = modifier,
-            )
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = modifier) {
+                TitleOrLogo(title = "TV Guide", logoImageUrl = null, showLogo = false, modifier = Modifier.fillMaxWidth(.75f))
+                val channels = allPills.filterIsInstance<ResolvedPill.Channel>()
+                if (channels.isEmpty()) {
+                    Text("See what's on every channel", style = MaterialTheme.typography.titleSmall)
+                } else {
+                    Text(
+                        text = "ON NOW",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFFFCA5A5),
+                    )
+                    channels.take(4).forEach { channel ->
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            StationLogo(channel, Modifier.size(width = 44.dp, height = 26.dp))
+                            Text(
+                                text = channel.onNow?.title ?: channel.channelName,
+                                style = MaterialTheme.typography.titleSmall,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.width(460.dp),
+                            )
+                        }
+                    }
+                }
+            }
         }
 
         is ResolvedPill.Channel -> {
             val onNow = pill.onNow
-            if (onNow == null) {
-                HeaderText(
-                    eyebrow = pill.label,
-                    title = pill.channelName,
-                    meta = "Channel ${pill.number}",
-                    overview = null,
-                    progress = null,
-                    modifier = modifier,
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp), modifier = modifier) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    StationLogo(pill, Modifier.size(width = 64.dp, height = 38.dp))
+                    Text(
+                        text = if (onNow != null) "ON NOW · ${pill.label}" else pill.label,
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFFFCA5A5),
+                    )
+                }
+                TitleOrLogo(
+                    title = onNow?.title ?: pill.channelName,
+                    logoImageUrl = null,
+                    showLogo = false,
+                    modifier = Modifier.fillMaxWidth(.75f),
                 )
-            } else {
-                HeaderText(
-                    eyebrow = "ON NOW · ${pill.label}",
-                    title = onNow.title,
-                    meta = channelMeta(pill, onNow, LocalDateTime.now()),
-                    overview = onNow.overview,
-                    progress = progress(onNow, LocalDateTime.now()),
-                    modifier = modifier,
+                Text(
+                    text = if (onNow != null) channelMeta(pill, onNow, now) else "Channel ${pill.number}",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                val progress = onNow?.let { progress(it, now) }
+                if (progress != null) {
+                    Box(
+                        Modifier
+                            .width(220.dp)
+                            .height(4.dp)
+                            .clip(RoundedCornerShape(2.dp))
+                            .background(Color.White.copy(alpha = 0.18f)),
+                    ) {
+                        Box(
+                            Modifier
+                                .fillMaxWidth(progress)
+                                .fillMaxHeight()
+                                .background(Color(0xFF60A5FA)),
+                        )
+                    }
+                }
+                val overview = onNow?.overview
+                if (!overview.isNullOrBlank()) {
+                    Text(
+                        text = overview,
+                        style = MaterialTheme.typography.bodyMedium,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.width(520.dp),
+                    )
+                }
             }
         }
     }
 }
 
+/** A channel's logo on a dark tile, as in the guide; white logos vanish on a light one */
 @Composable
-private fun HeaderText(
-    eyebrow: String?,
-    title: String,
-    meta: String,
-    overview: String?,
-    progress: Float?,
-    modifier: Modifier,
+private fun StationLogo(
+    channel: ResolvedPill.Channel,
+    modifier: Modifier = Modifier,
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp), modifier = modifier) {
-        if (eyebrow != null) {
-            Text(
-                text = eyebrow,
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.Bold,
-                color = Color(0xFFFCA5A5),
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier =
+            modifier
+                .clip(RoundedCornerShape(6.dp))
+                .background(Color(0xFF0D1018))
+                .padding(3.dp),
+    ) {
+        if (channel.logoUrl != null) {
+            AsyncImage(
+                model = channel.logoUrl,
+                contentDescription = null,
+                contentScale = ContentScale.Fit,
+                modifier = Modifier.fillMaxWidth(),
             )
-        }
-        TitleOrLogo(title = title, logoImageUrl = null, showLogo = false, modifier = Modifier.fillMaxWidth(.75f))
-        Text(text = meta, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        if (progress != null) {
-            Box(
-                Modifier
-                    .width(220.dp)
-                    .height(4.dp)
-                    .clip(RoundedCornerShape(2.dp))
-                    .background(Color.White.copy(alpha = 0.18f)),
-            ) {
-                Box(
-                    Modifier
-                        .fillMaxWidth(progress)
-                        .fillMaxHeight()
-                        .background(Color(0xFF60A5FA)),
-                )
-            }
-        }
-        if (!overview.isNullOrBlank()) {
-            Text(
-                text = overview,
-                style = MaterialTheme.typography.bodyMedium,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.width(520.dp),
-            )
+        } else {
+            Text(channel.number, color = Color.White, fontWeight = FontWeight.Bold)
         }
     }
 }
@@ -342,7 +365,13 @@ internal fun channelMeta(
             ?.let { Duration.between(now, it).toMinutes() }
             ?.takeIf { it >= 0 }
             ?.let { "$it min left" }
-    return listOfNotNull(pill.channelName.ifBlank { null }, onNow.episodeTitle, times, left).joinToString(" · ")
+    return listOfNotNull(
+        pill.channelName.ifBlank { null },
+        onNow.episodeTitle,
+        "New".takeIf { onNow.isNew },
+        times,
+        left,
+    ).joinToString(" · ")
 }
 
 internal fun progress(
