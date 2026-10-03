@@ -7,7 +7,10 @@ import com.github.damontecres.wholphin.data.model.BaseItem
 import com.github.damontecres.wholphin.services.hilt.StandardOkHttpClient
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.MapSerializer
@@ -44,6 +47,11 @@ import javax.inject.Singleton
  * Built for speed, since it sits on the home page: the last config and the ids it needed are kept
  * on the device, so [cached] draws the row with no network at all, and [refresh] then catches up
  * with one request for the config and one for what's on. Backdrops are stock art bundled in the app.
+ *
+ * Live games (#1427, #1422): while a Boston game is on, Scuffed's /api/gooseflix/live lists it and
+ * its pill goes at the front of the same row, for everyone unless their config turns
+ * [QuickPillsConfig.liveEvents] off; users with no pills of their own get a row of just that.
+ * Fetched alongside the config, and again by [liveNow] every minute while home is up.
  */
 @Singleton
 class QuickPillsService
@@ -61,34 +69,63 @@ class QuickPillsService
         private val idMap = MapSerializer(String.serializer(), String.serializer())
 
         /** The row as it was last time, from the device alone; null if there's nothing kept */
-        fun cached(userId: UUID): List<ResolvedPill>? {
-            val config = prefs.getString("config_$userId", null)?.let(::parseConfig) ?: return null
-            return build(userId, config.pills, onNow = emptyMap(), resume = null, resumeKnown = false)
+        fun cached(
+            userId: UUID,
+            tvAccess: Boolean,
+        ): List<ResolvedPill>? {
+            val config = prefs.getString("config_$userId", null)?.let(::parseConfig)
+            val live = livePills(config, tvAccess, cachedEvents(), LocalDateTime.now())
+            if (config == null && live.isEmpty()) return null
+            return live + build(userId, config?.pills.orEmpty(), onNow = emptyMap(), resume = null, resumeKnown = false)
+        }
+
+        /** The live game pills on their own, fresh from Scuffed, for the minute-by-minute check */
+        suspend fun liveNow(
+            userId: UUID,
+            tvAccess: Boolean,
+        ): List<ResolvedPill.Live> {
+            val config = prefs.getString("config_$userId", null)?.let(::parseConfig)
+            if (config?.liveEvents == false || !tvAccess) return emptyList()
+            return livePills(config, tvAccess, fetchEvents() ?: cachedEvents(), LocalDateTime.now())
         }
 
         /** The user's current config, ids and what's on, from the server, kept for [cached] */
         suspend fun refresh(
             userId: UUID,
             tvAccess: Boolean,
-        ): List<ResolvedPill> {
-            val raw =
-                try {
-                    displayPreferencesService
-                        .getDisplayPreferences(userId, DISPLAY_PREFS_ID, CLIENT)
-                        .customPrefs[PREF_KEY]
-                } catch (ex: Exception) {
-                    Timber.w(ex, "Could not read quick pills")
-                    return cached(userId).orEmpty()
+        ): List<ResolvedPill> =
+            coroutineScope {
+                // Both at once: the live list comes from Scuffed, the rest from Jellyfin
+                val events = async { if (tvAccess) fetchEvents() else null }
+                val raw =
+                    try {
+                        displayPreferencesService
+                            .getDisplayPreferences(userId, DISPLAY_PREFS_ID, CLIENT)
+                            .customPrefs[PREF_KEY]
+                    } catch (ex: Exception) {
+                        Timber.w(ex, "Could not read quick pills")
+                        events.cancel()
+                        return@coroutineScope cached(userId, tvAccess).orEmpty()
+                    }
+                val config = raw?.let(::parseConfig)
+                if (raw == null || config == null) {
+                    prefs.edit().remove("config_$userId").apply()
+                } else {
+                    prefs.edit().putString("config_$userId", raw).apply()
                 }
-            val config = raw?.let(::parseConfig)
-            if (config == null || config.pills.isEmpty()) {
-                prefs.edit().remove("config_$userId").apply()
-                return emptyList()
+                val pills = refreshPills(userId, tvAccess, config?.pills.orEmpty())
+                livePills(config, tvAccess, events.await() ?: cachedEvents(), LocalDateTime.now()) + pills
             }
-            prefs.edit().putString("config_$userId", raw).apply()
-            fillMissingIds(userId, tvAccess, config.pills)
 
-            val channelIds = config.pills.mapNotNull { channelIdFor(it) }
+        private suspend fun refreshPills(
+            userId: UUID,
+            tvAccess: Boolean,
+            pills: List<QuickPill>,
+        ): List<ResolvedPill> {
+            if (pills.isEmpty()) return emptyList()
+            fillMissingIds(userId, tvAccess, pills)
+
+            val channelIds = pills.mapNotNull { channelIdFor(it) }
             val onNow =
                 if (channelIds.isEmpty()) {
                     emptyMap()
@@ -112,8 +149,8 @@ class QuickPillsService
                     }
                 }
             val resume =
-                if (config.pills.any { it.type == QuickPill.Type.RESUME }) lastWatched(userId) else null
-            return build(userId, config.pills, onNow, resume, resumeKnown = true)
+                if (pills.any { it.type == QuickPill.Type.RESUME }) lastWatched(userId) else null
+            return build(userId, pills, onNow, resume, resumeKnown = true)
         }
 
         private fun build(
@@ -153,6 +190,70 @@ class QuickPillsService
                     }
                 }
             }
+
+        private fun livePills(
+            config: QuickPillsConfig?,
+            tvAccess: Boolean,
+            events: List<LiveEvent>,
+            now: LocalDateTime,
+        ): List<ResolvedPill.Live> {
+            if (config?.liveEvents == false || !tvAccess) return emptyList()
+            return events.mapNotNull { event -> resolveLive(event, now) }
+        }
+
+        private fun resolveLive(
+            event: LiveEvent,
+            now: LocalDateTime,
+        ): ResolvedPill.Live? {
+            val window = liveWindow(event, now) ?: return null
+            val channelId = event.channelId.toUUIDOrNull() ?: return null
+            return ResolvedPill.Live(
+                label = event.label,
+                number = event.number,
+                channelId = channelId,
+                isLive = window,
+                title = event.title,
+                subtitle = event.subtitle,
+                start = localTime(event.start)!!,
+                end = localTime(event.end)!!,
+                onNow = event.onNow,
+                colors = LiveColors.of(event.colors),
+                logoUrl = imageUrlService.getItemImageUrl(channelId, ImageType.PRIMARY, maxHeight = 96),
+                artUri = artUri("sports"),
+            )
+        }
+
+        /** What Scuffed says is on, kept on the device for [cached]; null when it can't be reached */
+        private suspend fun fetchEvents(): List<LiveEvent>? {
+            val url =
+                SCUFFED_URL
+                    ?.toHttpUrlOrNull()
+                    ?.newBuilder()
+                    ?.addPathSegments("api/gooseflix/live")
+                    ?.build() ?: return null
+            return try {
+                withContext(Dispatchers.IO) {
+                    withTimeout(LIVE_TIMEOUT_MS) {
+                        okHttpClient.newCall(Request.Builder().url(url).build()).execute().use { response ->
+                            if (!response.isSuccessful) return@use null
+                            val body = response.body.string()
+                            artJson.decodeFromString<LiveEvents>(body).events.also {
+                                prefs.edit().putString("live_events", body).apply()
+                            }
+                        }
+                    }
+                }
+            } catch (ex: Exception) {
+                Timber.d(ex, "Could not get live events")
+                null
+            }
+        }
+
+        private fun cachedEvents(): List<LiveEvent> =
+            prefs
+                .getString("live_events", null)
+                ?.let { runCatching { artJson.decodeFromString<LiveEvents>(it).events }.getOrNull() }
+                .orEmpty()
 
         private fun channelIdFor(pill: QuickPill): UUID? =
             if (pill.type != QuickPill.Type.CHANNEL) {
@@ -391,6 +492,35 @@ class QuickPillsService
                 return title to marker.startsWith('ᴺ')
             }
 
+            /** Don't hold the home page up for the live list */
+            const val LIVE_TIMEOUT_MS = 1500L
+
+            /** How early a game's pill may show; Scuffed decides, this only drops stale ones */
+            private val PREGAME: java.time.Duration = java.time.Duration.ofMinutes(60)
+
+            /**
+             * Whether [event] is on now, from its own times (a kept list can be a while old):
+             * true while the game is live, false in its pregame, null when it shouldn't show.
+             */
+            fun liveWindow(
+                event: LiveEvent,
+                now: LocalDateTime,
+            ): Boolean? {
+                val start = localTime(event.start) ?: return null
+                val end = localTime(event.end) ?: return null
+                return when {
+                    !now.isBefore(end) -> null
+                    !now.isBefore(start) -> true
+                    !now.isBefore(start.minus(PREGAME)) -> false
+                    else -> null
+                }
+            }
+
+            /** Scuffed's UTC "2026-10-04T00:00:00Z" in local time, as the SDK gives programme times */
+            fun localTime(utc: String): LocalDateTime? =
+                runCatching { LocalDateTime.ofInstant(java.time.Instant.parse(utc), java.time.ZoneId.systemDefault()) }
+                    .getOrNull()
+
             private val json = Json { ignoreUnknownKeys = true }
             private val artJson = Json { ignoreUnknownKeys = true }
 
@@ -409,7 +539,62 @@ class QuickPillsService
 data class QuickPillsConfig(
     val version: Int = 1,
     val pills: List<QuickPill> = emptyList(),
+    /** Live game pills at the front of the row; written by Scuffed only when turned off */
+    val liveEvents: Boolean = true,
 )
+
+/** Scuffed's /api/gooseflix/live */
+@Serializable
+data class LiveEvents(
+    val events: List<LiveEvent> = emptyList(),
+)
+
+@Serializable
+data class LiveEvent(
+    /** The team, eg "Patriots" */
+    val label: String,
+    val number: String,
+    val channelId: String,
+    /** "live" or "pregame", when Scuffed looked; [QuickPillsService.liveWindow] decides now */
+    val phase: String = "live",
+    /** The matchup, eg "Patriots at Bills" */
+    val title: String,
+    /** League and network, eg "NFL Football · CBS (WBZ)" */
+    val subtitle: String = "",
+    /** UTC, eg "2026-10-04T17:00:00Z" */
+    val start: String,
+    val end: String,
+    /** What's airing, eg the pregame show */
+    val onNow: String = "",
+    val colors: Map<String, String> = emptyMap(),
+)
+
+/** A team's pill colours, as ARGB */
+data class LiveColors(
+    val background: Long,
+    val backgroundEnd: Long,
+    val tile: Long,
+) {
+    companion object {
+        val DEFAULT = LiveColors(0xFF002244, 0xFF0B3A75, 0xFFC60C30)
+
+        fun of(colors: Map<String, String>): LiveColors =
+            LiveColors(
+                background = parse(colors["bg"]) ?: DEFAULT.background,
+                backgroundEnd = parse(colors["bg2"]) ?: parse(colors["bg"]) ?: DEFAULT.backgroundEnd,
+                tile = parse(colors["tile"]) ?: DEFAULT.tile,
+            )
+
+        /** "#C60C30" as 0xFFC60C30 */
+        fun parse(hex: String?): Long? =
+            hex
+                ?.trim()
+                ?.removePrefix("#")
+                ?.takeIf { it.length == 6 }
+                ?.toLongOrNull(16)
+                ?.let { it or 0xFF000000 }
+    }
+}
 
 @Serializable
 data class QuickPill(
@@ -477,12 +662,36 @@ data class LibraryMatch(
 sealed interface ResolvedPill {
     val label: String
 
+    /** The same pill across reloads, for the row's keys and the header */
+    val key: String
+
+    /** A game on one of the team channels, at the front of the row while it's on */
+    data class Live(
+        override val label: String,
+        val number: String,
+        val channelId: UUID,
+        /** False during the pregame */
+        val isLive: Boolean,
+        val title: String,
+        val subtitle: String,
+        val start: LocalDateTime,
+        val end: LocalDateTime,
+        val onNow: String,
+        val colors: LiveColors,
+        val logoUrl: String?,
+        val artUri: String,
+    ) : ResolvedPill {
+        override val key get() = "live_$channelId"
+    }
+
     data class Guide(
         override val label: String,
         val libraryId: UUID,
         val libraryType: BaseItemKind,
         val artUri: String,
-    ) : ResolvedPill
+    ) : ResolvedPill {
+        override val key get() = "guide"
+    }
 
     data class Channel(
         override val label: String,
@@ -492,11 +701,15 @@ sealed interface ResolvedPill {
         val logoUrl: String?,
         val onNow: OnNow?,
         val artUri: String? = null,
-    ) : ResolvedPill
+    ) : ResolvedPill {
+        override val key get() = "channel_$channelId"
+    }
 
     data class Resume(
         override val label: String,
         /** Null until looked up; pressing it then looks it up and plays */
         val item: BaseItem?,
-    ) : ResolvedPill
+    ) : ResolvedPill {
+        override val key get() = "resume"
+    }
 }

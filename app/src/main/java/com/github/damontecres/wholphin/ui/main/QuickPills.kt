@@ -1,5 +1,6 @@
 package com.github.damontecres.wholphin.ui.main
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -26,6 +27,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
@@ -33,7 +35,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.tv.material3.Border
 import androidx.tv.material3.ClickableSurfaceDefaults
+import androidx.tv.material3.Glow
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
@@ -103,7 +107,7 @@ class QuickPillsViewModel
                         return@launchIO
                     }
                     if (_pills.value.isEmpty()) {
-                        quickPillsService.cached(user.id)?.let { _pills.value = it }
+                        quickPillsService.cached(user.id, user.tvAccess)?.let { _pills.value = it }
                     }
                     if (_pills.value.isNotEmpty()) _ready.value = true
                     // Never hold the page's focus for long on a slow server
@@ -117,6 +121,23 @@ class QuickPillsViewModel
                 } finally {
                     _ready.value = true
                 }
+            }
+        }
+
+        /**
+         * Brings the live game pills up to date: called every minute while home is showing, so a
+         * game's pill appears when its pregame starts and goes when it ends
+         */
+        fun refreshLive() {
+            viewModelScope.launchIO {
+                val user = serverRepository.currentUserDto ?: return@launchIO
+                val hidden =
+                    userPreferencesService
+                        .getCurrent()
+                        .appPreferences.homePagePreferences.hideQuickPills
+                if (hidden) return@launchIO
+                val live = quickPillsService.liveNow(user.id, user.tvAccess)
+                _pills.update { pills -> live + pills.filterNot { it is ResolvedPill.Live } }
             }
         }
 
@@ -182,6 +203,10 @@ class QuickPillsViewModel
                     is ResolvedPill.Guide -> {
                         backdropService.submit("pill_guide", pill.artUri)
                     }
+
+                    is ResolvedPill.Live -> {
+                        backdropService.submit("pill_live", pill.artUri)
+                    }
                 }
             }
         }
@@ -193,6 +218,10 @@ class QuickPillsViewModel
                 }
 
                 is ResolvedPill.Channel -> {
+                    navigationManager.navigateTo(Destination.Playback(itemId = pill.channelId, positionMs = 0L))
+                }
+
+                is ResolvedPill.Live -> {
                     navigationManager.navigateTo(Destination.Playback(itemId = pill.channelId, positionMs = 0L))
                 }
 
@@ -230,13 +259,104 @@ fun QuickPillsRow(
         contentPadding = PaddingValues(start = 8.dp, end = 32.dp, top = 10.dp, bottom = 10.dp),
         modifier = modifier,
     ) {
-        itemsIndexed(pills) { index, pill ->
-            QuickPillChip(
-                pill = pill,
-                onClick = { onClickPill(pill) },
+        // Keyed, so focus stays on the same pill when a live game's pill comes or goes in front of it
+        itemsIndexed(pills, key = { index, pill -> rowKey(pills, index, pill) }) { index, pill ->
+            val chipModifier =
+                (if (index == 0) Modifier.focusRequester(focusRequester) else Modifier)
+                    .onFocusChanged { if (it.isFocused) onFocusPill(pill) }
+            if (pill is ResolvedPill.Live) {
+                LivePillChip(pill = pill, onClick = { onClickPill(pill) }, modifier = chipModifier)
+            } else {
+                QuickPillChip(pill = pill, onClick = { onClickPill(pill) }, modifier = chipModifier)
+            }
+        }
+    }
+}
+
+/** [ResolvedPill.key], made unique if the same pill is in the row twice */
+internal fun rowKey(
+    pills: List<ResolvedPill>,
+    index: Int,
+    pill: ResolvedPill,
+): String {
+    val before = pills.take(index).count { it.key == pill.key }
+    return if (before == 0) pill.key else "${pill.key}#$before"
+}
+
+private val LiveYellow = Color(0xFFFACC15)
+
+/** A live game: the team's colours, its logo and a yellow LIVE tag (SOON during the pregame) */
+@Composable
+private fun LivePillChip(
+    pill: ResolvedPill.Live,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        onClick = onClick,
+        shape = ClickableSurfaceDefaults.shape(CircleShape),
+        colors =
+            ClickableSurfaceDefaults.colors(
+                containerColor = Color.Transparent,
+                contentColor = Color.White,
+                focusedContainerColor = Color.Transparent,
+                focusedContentColor = Color.White,
+            ),
+        border =
+            ClickableSurfaceDefaults.border(
+                border = Border(BorderStroke(1.5.dp, LiveYellow.copy(alpha = 0.55f)), shape = CircleShape),
+                focusedBorder = Border(BorderStroke(3.dp, LiveYellow), shape = CircleShape),
+            ),
+        glow = ClickableSurfaceDefaults.glow(focusedGlow = Glow(LiveYellow.copy(alpha = 0.6f), 10.dp)),
+        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.08f),
+        modifier = modifier.height(52.dp),
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            modifier =
+                Modifier
+                    .fillMaxHeight()
+                    .background(
+                        Brush.horizontalGradient(listOf(Color(pill.colors.background), Color(pill.colors.backgroundEnd))),
+                    ).padding(start = 8.dp, end = 12.dp),
+        ) {
+            Box(
+                contentAlignment = Alignment.Center,
                 modifier =
-                    (if (index == 0) Modifier.focusRequester(focusRequester) else Modifier)
-                        .onFocusChanged { if (it.isFocused) onFocusPill(pill) },
+                    Modifier
+                        .size(width = 56.dp, height = 36.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(Color(pill.colors.tile))
+                        .padding(3.dp),
+            ) {
+                if (pill.logoUrl != null) {
+                    AsyncImage(
+                        model = pill.logoUrl,
+                        contentDescription = null,
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                } else {
+                    Text(pill.number, color = Color.White, fontWeight = FontWeight.Bold)
+                }
+            }
+            Text(
+                text = pill.label,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+            )
+            Text(
+                text = if (pill.isLive) "LIVE" else "SOON",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.ExtraBold,
+                color = Color(0xFF111111),
+                modifier =
+                    Modifier
+                        .clip(CircleShape)
+                        .background(LiveYellow)
+                        .padding(horizontal = 8.dp, vertical = 2.dp),
             )
         }
     }
@@ -278,6 +398,8 @@ private fun QuickPillChip(
                 is ResolvedPill.Resume -> {
                     PillIcon(Icons.Default.PlayArrow, Color(0xFF16A34A))
                 }
+
+                is ResolvedPill.Live -> {}
             }
             Text(
                 text = pill.label,
@@ -316,6 +438,10 @@ fun QuickPillHeader(
 ) {
     val now = LocalDateTime.now()
     when (pill) {
+        is ResolvedPill.Live -> {
+            LivePillHeader(pill, now, modifier)
+        }
+
         is ResolvedPill.Resume -> {
             val item = pill.item
             if (item != null) {
@@ -390,6 +516,98 @@ fun QuickPillHeader(
             }
         }
     }
+}
+
+/** "LIVE NOW · BRUINS", the matchup, network and time, and how far into the game */
+@Composable
+private fun LivePillHeader(
+    pill: ResolvedPill.Live,
+    now: LocalDateTime,
+    modifier: Modifier = Modifier,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp), modifier = modifier) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Box(
+                Modifier
+                    .size(10.dp)
+                    .clip(CircleShape)
+                    .background(if (pill.isLive) Color(0xFFEF4444) else LiveYellow),
+            )
+            Text(
+                text = liveEyebrow(pill, now),
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
+                color = if (pill.isLive) Color(0xFFFCA5A5) else LiveYellow,
+            )
+        }
+        TitleOrLogo(title = pill.title, logoImageUrl = null, showLogo = false, modifier = Modifier.fillMaxWidth(.75f))
+        Text(
+            text = liveMeta(pill, now),
+            style = MaterialTheme.typography.titleSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        if (pill.isLive) {
+            val progress =
+                progress(
+                    OnNow(pill.title, episodeTitle = null, overview = null, start = pill.start, end = pill.end, imageUrl = null),
+                    now,
+                )
+            if (progress != null) {
+                Box(
+                    Modifier
+                        .width(220.dp)
+                        .height(4.dp)
+                        .clip(RoundedCornerShape(2.dp))
+                        .background(Color.White.copy(alpha = 0.18f)),
+                ) {
+                    Box(
+                        Modifier
+                            .fillMaxWidth(progress)
+                            .fillMaxHeight()
+                            .background(LiveYellow),
+                    )
+                }
+            }
+        } else if (pill.onNow.isNotBlank() && pill.onNow != pill.title) {
+            Text(
+                text = "On now: ${pill.onNow}",
+                style = MaterialTheme.typography.bodyMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.width(520.dp),
+            )
+        }
+    }
+}
+
+/** "LIVE NOW · BRUINS", or before the game "PREGAME · BRUINS · STARTS IN 25 MIN" */
+internal fun liveEyebrow(
+    pill: ResolvedPill.Live,
+    now: LocalDateTime,
+): String {
+    val team = pill.label.uppercase()
+    if (pill.isLive) return "LIVE NOW · $team"
+    val minutes = Duration.between(now, pill.start).toMinutes()
+    return if (minutes >= 1) "PREGAME · $team · STARTS IN $minutes MIN" else "PREGAME · $team · STARTING NOW"
+}
+
+/** "NHL Hockey · NESN · Ch 1002 · 8:00 – 10:30 PM · 45 min left" */
+internal fun liveMeta(
+    pill: ResolvedPill.Live,
+    now: LocalDateTime,
+): String {
+    val left =
+        Duration
+            .between(now, pill.end)
+            .toMinutes()
+            .takeIf { pill.isLive && it >= 0 }
+            ?.let { "$it min left" }
+    return listOfNotNull(
+        pill.subtitle.ifBlank { null },
+        "Ch ${pill.number}",
+        "${TIME.format(pill.start)} – ${TIME.format(pill.end)}",
+        left,
+    ).joinToString(" · ")
 }
 
 /** A channel's logo on a dark tile, as in the guide; white logos vanish on a light one */

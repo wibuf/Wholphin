@@ -45,7 +45,9 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.LifecycleStartEffect
+import androidx.lifecycle.lifecycleScope
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.github.damontecres.wholphin.R
@@ -94,6 +96,7 @@ import com.github.damontecres.wholphin.util.HomeRowLoadingState
 import com.github.damontecres.wholphin.util.LoadingState
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 import org.jellyfin.sdk.model.DateTime
 import org.jellyfin.sdk.model.api.BaseItemKind
 import timber.log.Timber
@@ -317,6 +320,19 @@ fun HomePageContent(
             onStopOrDispose { }
         }
     }
+    if (pillsViewModel != null) {
+        // Live game pills come and go with the game, so look again every minute while home is up
+        LifecycleResumeEffect(pillsViewModel) {
+            val job =
+                lifecycleScope.launch {
+                    while (true) {
+                        delay(LIVE_PILLS_INTERVAL_MS)
+                        pillsViewModel.refreshLive()
+                    }
+                }
+            onPauseOrDispose { job.cancel() }
+        }
+    }
     var focusedPill by remember { mutableStateOf<ResolvedPill?>(null) }
     val pillsFocusRequester = remember { FocusRequester() }
     val pillsReady by (pillsViewModel?.ready ?: remember { MutableStateFlow(true) }).collectAsState()
@@ -395,7 +411,8 @@ fun HomePageContent(
                         row.games.getOrNull(position.column)?.let { row.libraryId to it }
                     }
                 }
-            val pill = focusedPill
+            // The row's current copy of the focused pill, which the minute-by-minute check updates
+            val pill = focusedPill?.let { focused -> pills.firstOrNull { it.key == focused.key } ?: focused }
             if (pill != null) {
                 QuickPillHeader(pill, pills, showLogo, HeaderUtils.modifier)
             } else if (focusedGame != null) {
@@ -837,3 +854,4 @@ fun HomePageViewMoreCard(
 
 /** How many frames-ish to retry focusing the quick pills before giving up (50 ms apart) */
 private const val PILL_FOCUS_ATTEMPTS = 20
+private const val LIVE_PILLS_INTERVAL_MS = 60_000L
