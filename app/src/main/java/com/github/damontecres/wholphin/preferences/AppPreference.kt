@@ -15,7 +15,6 @@ import com.github.damontecres.wholphin.ui.preferences.PreferenceGroup
 import com.github.damontecres.wholphin.ui.preferences.PreferenceScreenOption
 import com.github.damontecres.wholphin.ui.preferences.PreferenceValidation
 import com.github.damontecres.wholphin.util.DebugLogTree
-import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
@@ -328,33 +327,45 @@ sealed interface AppPreference<Pref, T> {
                 },
             )
 
+        /** In steps of [PASS_OUT_STEP_MINUTES], so 90 minutes is an option */
         val PassOutProtection =
             AppSliderPreference<AppPreferences>(
                 title = R.string.pass_out_protection,
-                defaultValue = 2,
+                defaultValue = 4,
                 min = 0,
-                max = 3,
+                max = 6,
                 interval = 1,
-                getter = { it.playbackPreferences.passOutProtectionMs.milliseconds.inWholeHours },
+                getter = { it.playbackPreferences.passOutProtectionMs.milliseconds.inWholeMinutes / PASS_OUT_STEP_MINUTES },
                 setter = { prefs, value ->
                     prefs.updatePlaybackPreferences {
-                        passOutProtectionMs = value.hours.inWholeMilliseconds
+                        passOutProtectionMs = passOutProtectionMs(value)
                     }
                 },
                 summarizer = { value ->
+                    val minutes = (value ?: 0L) * PASS_OUT_STEP_MINUTES
                     if (value == null) {
                         ""
                     } else if (value == 0L) {
                         WholphinApplication.instance.getString(R.string.disabled)
-                    } else {
+                    } else if (minutes % 60 == 0L) {
                         WholphinApplication.instance.resources.getQuantityString(
                             R.plurals.hours,
-                            value.toInt(),
-                            value.toInt(),
+                            (minutes / 60).toInt(),
+                            (minutes / 60).toInt(),
+                        )
+                    } else {
+                        WholphinApplication.instance.resources.getQuantityString(
+                            R.plurals.minutes,
+                            minutes.toInt(),
+                            minutes.toString(),
                         )
                     }
                 },
             )
+
+        const val PASS_OUT_STEP_MINUTES = 30L
+
+        fun passOutProtectionMs(steps: Long): Long = (steps * PASS_OUT_STEP_MINUTES).minutes.inWholeMilliseconds
 
         const val MEGA_BIT = 1024 * 1024L
         const val DEFAULT_BITRATE = 100 * MEGA_BIT

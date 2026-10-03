@@ -9,7 +9,6 @@ import org.jellyfin.sdk.model.api.BaseItemKind
 import java.io.InputStream
 import java.io.OutputStream
 import javax.inject.Inject
-import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.seconds
 
 class AppPreferencesSerializer
@@ -48,7 +47,7 @@ class AppPreferencesSerializer
                                 skipPreviews = AppPreference.SkipPreviews.defaultValue
                                 skipRecaps = AppPreference.SkipRecaps.defaultValue
                                 passOutProtectionMs =
-                                    AppPreference.PassOutProtection.defaultValue.hours.inWholeMilliseconds
+                                    AppPreference.passOutProtectionMs(AppPreference.PassOutProtection.defaultValue)
                                 showNextUpWhen = AppPreference.ShowNextUpTiming.defaultValue
                                 playerBackend = AppPreference.PlayerBackendPref.defaultValue
                                 refreshRateSwitching =
