@@ -340,12 +340,20 @@ fun HomePageContent(
     val currentOnClickPlay by rememberUpdatedState(onClickPlay)
 
     if (takeFocus) {
-        LaunchedEffect(homeRows, pillsReady) {
+        LaunchedEffect(homeRows, pillsReady, pills.isNotEmpty()) {
             // Wait to learn whether there are pills, or rows would take focus first and keep it
             if (!pillsReady) return@LaunchedEffect
             if (!firstFocused && pills.isNotEmpty() && lastFocusOnPills) {
-                firstFocused = pillsFocusRequester.tryRequestFocus()
                 listState.scrollToItem(0)
+                // The pills row may not be laid out yet on the frame it first appears, and a
+                // request then fails, leaving focus on the nav drawer: keep trying for a moment
+                repeat(PILL_FOCUS_ATTEMPTS) {
+                    if (!firstFocused) {
+                        firstFocused = pillsFocusRequester.tryRequestFocus()
+                        if (!firstFocused) delay(50)
+                    }
+                }
+                if (firstFocused) return@LaunchedEffect
             }
             if (!firstFocused && homeRows.isNotEmpty()) {
                 if (position.row >= 0) {
@@ -826,3 +834,6 @@ fun HomePageViewMoreCard(
         showTitle = viewOptions.showTitles,
     )
 }
+
+/** How many frames-ish to retry focusing the quick pills before giving up (50 ms apart) */
+private const val PILL_FOCUS_ATTEMPTS = 20
