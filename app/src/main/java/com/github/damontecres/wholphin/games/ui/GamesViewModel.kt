@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.github.damontecres.wholphin.games.GameArtworkService
 import com.github.damontecres.wholphin.games.MoonbaseGamesService
+import com.github.damontecres.wholphin.games.model.GameDetail
 import com.github.damontecres.wholphin.games.model.GameLibrary
 import com.github.damontecres.wholphin.games.model.GameSummary
 import com.github.damontecres.wholphin.games.model.GameSystem
@@ -132,6 +133,26 @@ class GamesRowViewModel
         private val backdropService: BackdropService,
     ) : ViewModel() {
         private var backdropJob: Job? = null
+
+        // Details for the home header, kept while the home page is up so moving back and forth
+        // along the row doesn't refetch
+        private val details = mutableMapOf<String, GameDetail?>()
+
+        suspend fun detail(
+            libraryId: String,
+            gameId: String,
+        ): GameDetail? {
+            val key = "$libraryId/$gameId"
+            if (key in details) return details[key]
+            return try {
+                games.game(libraryId, gameId).also { details[key] = it }
+            } catch (ex: CancellationException) {
+                throw ex
+            } catch (ex: Exception) {
+                Timber.d(ex, "No details for game %s", gameId)
+                null
+            }
+        }
 
         /**
          * Shows the game's screenshot as the home backdrop, or none at all while it loads or if

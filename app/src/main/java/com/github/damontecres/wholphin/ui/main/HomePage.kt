@@ -52,6 +52,7 @@ import com.github.damontecres.wholphin.data.model.BaseItem
 import com.github.damontecres.wholphin.data.model.HomeRowConfig
 import com.github.damontecres.wholphin.data.model.HomeRowViewOptions
 import com.github.damontecres.wholphin.data.model.QuickDetailsData
+import com.github.damontecres.wholphin.games.ui.GameHomeHeader
 import com.github.damontecres.wholphin.games.ui.GamesHomeRow
 import com.github.damontecres.wholphin.preferences.UserPreferences
 import com.github.damontecres.wholphin.ui.Cards
@@ -349,7 +350,18 @@ fun HomePageContent(
                         }
                     }.fillMaxSize(),
         ) {
-            headerComposable.invoke(focusedItem)
+            // Fork: a focused game gets its own header; games aren't Jellyfin items
+            val focusedGame =
+                remember(homeRows, position) {
+                    (homeRows.getOrNull(position.row) as? HomeRowLoadingState.Games)?.let { row ->
+                        row.games.getOrNull(position.column)?.let { row.libraryId to it }
+                    }
+                }
+            if (focusedGame != null) {
+                GameHomeHeader(focusedGame.first, focusedGame.second, HeaderUtils.modifier)
+            } else {
+                headerComposable.invoke(focusedItem)
+            }
 
             val density = LocalDensity.current
             val spaceAbovePx =
