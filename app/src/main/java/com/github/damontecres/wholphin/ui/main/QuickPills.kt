@@ -51,6 +51,7 @@ import com.github.damontecres.wholphin.ui.components.TitleOrLogo
 import com.github.damontecres.wholphin.ui.launchIO
 import com.github.damontecres.wholphin.ui.nav.Destination
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -79,21 +80,32 @@ class QuickPillsViewModel
         private val _ready = MutableStateFlow(false)
         val ready: StateFlow<Boolean> = _ready
 
-        /** Called whenever the home page comes back, since what's on will have moved on */
+        /**
+         * Called whenever the home page comes back. Draws the row straight away from what the
+         * device kept, then catches up (config, what's on) in the background.
+         */
         fun load() {
             viewModelScope.launchIO {
-                val hidden =
-                    userPreferencesService
-                        .getCurrent()
-                        .appPreferences.homePagePreferences.hideQuickPills
-                val user = serverRepository.currentUserDto
                 try {
+                    val hidden =
+                        userPreferencesService
+                            .getCurrent()
+                            .appPreferences.homePagePreferences.hideQuickPills
+                    val user = serverRepository.currentUserDto
                     if (hidden || user == null) {
                         _pills.value = emptyList()
                         return@launchIO
                     }
-                    val config = quickPillsService.configFor(user.id)
-                    _pills.value = quickPillsService.resolve(user.id, user.tvAccess, config)
+                    if (_pills.value.isEmpty()) {
+                        quickPillsService.cached(user.id)?.let { _pills.value = it }
+                    }
+                    if (_pills.value.isNotEmpty()) _ready.value = true
+                    // Never hold the page's focus for long on a slow server
+                    viewModelScope.launch {
+                        delay(READY_TIMEOUT_MS)
+                        _ready.value = true
+                    }
+                    _pills.value = quickPillsService.refresh(user.id, user.tvAccess)
                 } finally {
                     _ready.value = true
                 }
@@ -104,34 +116,48 @@ class QuickPillsViewModel
             viewModelScope.launch {
                 when (pill) {
                     is ResolvedPill.Channel -> {
-                        val url = pill.onNow?.imageUrl
-                        if (url != null) backdropService.submit("pill_${pill.channelId}", url) else backdropService.clearBackdrop()
+                        val art = pill.artUri
+                        if (art != null) backdropService.submit("pill_${pill.channelId}", art) else backdropService.clearBackdrop()
                     }
 
                     is ResolvedPill.Resume -> {
-                        backdropService.submit(pill.item)
+                        pill.item?.let { backdropService.submit(it) } ?: backdropService.clearBackdrop()
                     }
 
                     is ResolvedPill.Guide -> {
-                        // The guide has no art of its own: borrow what's on one of the channels
-                        val art =
-                            pills.value
-                                .filterIsInstance<ResolvedPill.Channel>()
-                                .firstNotNullOfOrNull { it.onNow?.imageUrl }
-                        if (art != null) backdropService.submit("pill_guide", art) else backdropService.clearBackdrop()
+                        backdropService.submit("pill_guide", pill.artUri)
                     }
                 }
             }
         }
 
         fun onClick(pill: ResolvedPill) {
-            navigationManager.navigateTo(
-                when (pill) {
-                    is ResolvedPill.Guide -> Destination.MediaItem(pill.libraryId, pill.libraryType, CollectionType.LIVETV)
-                    is ResolvedPill.Channel -> Destination.Playback(itemId = pill.channelId, positionMs = 0L)
-                    is ResolvedPill.Resume -> Destination.Playback(pill.item)
-                },
-            )
+            when (pill) {
+                is ResolvedPill.Guide -> {
+                    navigationManager.navigateTo(Destination.MediaItem(pill.libraryId, pill.libraryType, CollectionType.LIVETV))
+                }
+
+                is ResolvedPill.Channel -> {
+                    navigationManager.navigateTo(Destination.Playback(itemId = pill.channelId, positionMs = 0L))
+                }
+
+                is ResolvedPill.Resume -> {
+                    val item = pill.item
+                    if (item != null) {
+                        navigationManager.navigateTo(Destination.Playback(item))
+                    } else {
+                        // Pressed before the background lookup finished
+                        viewModelScope.launchIO {
+                            val user = serverRepository.currentUserDto ?: return@launchIO
+                            quickPillsService.lastWatched(user.id)?.let { navigationManager.navigateTo(Destination.Playback(it)) }
+                        }
+                    }
+                }
+            }
+        }
+
+        private companion object {
+            const val READY_TIMEOUT_MS = 1500L
         }
     }
 
@@ -236,35 +262,23 @@ fun QuickPillHeader(
     val now = LocalDateTime.now()
     when (pill) {
         is ResolvedPill.Resume -> {
-            HomePageHeader(item = pill.item, showLogo = showLogo, modifier = modifier)
+            val item = pill.item
+            if (item != null) {
+                HomePageHeader(item = item, showLogo = showLogo, modifier = modifier)
+            } else {
+                TitleOrLogo(title = pill.label, logoImageUrl = null, showLogo = false, modifier = modifier)
+            }
         }
 
         is ResolvedPill.Guide -> {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = modifier) {
                 TitleOrLogo(title = "TV Guide", logoImageUrl = null, showLogo = false, modifier = Modifier.fillMaxWidth(.75f))
-                val channels = allPills.filterIsInstance<ResolvedPill.Channel>()
-                if (channels.isEmpty()) {
-                    Text("See what's on every channel", style = MaterialTheme.typography.titleSmall)
-                } else {
-                    Text(
-                        text = "ON NOW",
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFFFCA5A5),
-                    )
-                    channels.take(4).forEach { channel ->
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            StationLogo(channel, Modifier.size(width = 44.dp, height = 26.dp))
-                            Text(
-                                text = channel.onNow?.title ?: channel.channelName,
-                                style = MaterialTheme.typography.titleSmall,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.width(460.dp),
-                            )
-                        }
-                    }
-                }
+                Text(
+                    text = "See what's on every channel right now, and pick something to watch.",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.width(520.dp),
+                )
             }
         }
 
@@ -281,7 +295,7 @@ fun QuickPillHeader(
                     )
                 }
                 TitleOrLogo(
-                    title = onNow?.title ?: pill.channelName,
+                    title = onNow?.title ?: pill.channelName.ifBlank { pill.label },
                     logoImageUrl = null,
                     showLogo = false,
                     modifier = Modifier.fillMaxWidth(.75f),

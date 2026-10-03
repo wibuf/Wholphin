@@ -1,17 +1,23 @@
 package com.github.damontecres.wholphin.services
 
+import android.content.Context
+import com.github.damontecres.wholphin.R
 import com.github.damontecres.wholphin.data.model.BaseItem
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.builtins.MapSerializer
+import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
 import org.jellyfin.sdk.api.client.ApiClient
-import org.jellyfin.sdk.api.client.extensions.itemsApi
 import org.jellyfin.sdk.api.client.extensions.liveTvApi
 import org.jellyfin.sdk.model.api.BaseItemDto
 import org.jellyfin.sdk.model.api.BaseItemKind
 import org.jellyfin.sdk.model.api.CollectionType
 import org.jellyfin.sdk.model.api.ImageType
 import org.jellyfin.sdk.model.api.request.GetLiveTvChannelsRequest
+import org.jellyfin.sdk.model.api.request.GetLiveTvProgramsRequest
+import org.jellyfin.sdk.model.serializer.toUUIDOrNull
 import timber.log.Timber
 import java.time.LocalDateTime
 import java.util.UUID
@@ -23,111 +29,176 @@ import javax.inject.Singleton
  *
  * Which pills a user gets is stored with their Jellyfin account, in display preferences
  * [DISPLAY_PREFS_ID] for client [CLIENT], custom pref [PREF_KEY], as [QuickPillsConfig] JSON. Scuffed
- * writes it; users without one see no row. Each device can still hide the row in home settings.
+ * writes it, with each channel's Jellyfin id beside its number; users without one see no row.
+ *
+ * Built for speed, since it sits on the home page: the last config and the ids it needed are kept
+ * on the device, so [cached] draws the row with no network at all, and [refresh] then catches up
+ * with one request for the config and one for what's on. Backdrops are stock art bundled in the app.
  */
 @Singleton
 class QuickPillsService
     @Inject
     constructor(
+        @param:ApplicationContext private val context: Context,
         private val api: ApiClient,
         private val displayPreferencesService: DisplayPreferencesService,
         private val navDrawerService: NavDrawerService,
         private val latestNextUpService: LatestNextUpService,
         private val imageUrlService: ImageUrlService,
     ) {
-        /** The user's pills, or empty if they have none or they can't be read */
-        suspend fun configFor(userId: UUID): List<QuickPill> =
-            try {
-                displayPreferencesService
-                    .getDisplayPreferences(userId, DISPLAY_PREFS_ID, CLIENT)
-                    .customPrefs[PREF_KEY]
-                    ?.let(::parseConfig)
-                    ?.pills
-                    .orEmpty()
-            } catch (ex: Exception) {
-                Timber.w(ex, "Could not read quick pills")
-                emptyList()
-            }
+        private val prefs by lazy { context.getSharedPreferences("fork_quick_pills", Context.MODE_PRIVATE) }
+        private val idMap = MapSerializer(String.serializer(), String.serializer())
 
-        /** Everything the row and header need, looked up now (what's on changes over time) */
-        suspend fun resolve(
+        /** The row as it was last time, from the device alone; null if there's nothing kept */
+        fun cached(userId: UUID): List<ResolvedPill>? {
+            val config = prefs.getString("config_$userId", null)?.let(::parseConfig) ?: return null
+            return build(userId, config.pills, onNow = emptyMap(), resume = null, resumeKnown = false)
+        }
+
+        /** The user's current config, ids and what's on, from the server, kept for [cached] */
+        suspend fun refresh(
             userId: UUID,
             tvAccess: Boolean,
-            pills: List<QuickPill>,
         ): List<ResolvedPill> {
-            if (pills.isEmpty()) return emptyList()
-            val channels =
-                if (pills.any { it.type == QuickPill.Type.CHANNEL }) {
+            val raw =
+                try {
+                    displayPreferencesService
+                        .getDisplayPreferences(userId, DISPLAY_PREFS_ID, CLIENT)
+                        .customPrefs[PREF_KEY]
+                } catch (ex: Exception) {
+                    Timber.w(ex, "Could not read quick pills")
+                    return cached(userId).orEmpty()
+                }
+            val config = raw?.let(::parseConfig)
+            if (config == null || config.pills.isEmpty()) {
+                prefs.edit().remove("config_$userId").apply()
+                return emptyList()
+            }
+            prefs.edit().putString("config_$userId", raw).apply()
+            fillMissingIds(userId, tvAccess, config.pills)
+
+            val channelIds = config.pills.mapNotNull { channelIdFor(it) }
+            val onNow =
+                if (channelIds.isEmpty()) {
+                    emptyMap()
+                } else {
                     try {
                         api.liveTvApi
-                            .getLiveTvChannels(
-                                GetLiveTvChannelsRequest(
+                            .getLiveTvPrograms(
+                                GetLiveTvProgramsRequest(
+                                    channelIds = channelIds,
                                     userId = userId,
-                                    addCurrentProgram = true,
-                                    enableImages = true,
+                                    isAiring = true,
+                                    enableImages = false,
+                                    limit = channelIds.size * 2,
                                 ),
                             ).content.items
-                            .associateBy { it.channelNumber?.trim() }
+                            .filter { it.channelId != null }
+                            .associate { it.channelId!! to program(it) }
                     } catch (ex: Exception) {
-                        Timber.w(ex, "Could not list channels for quick pills")
+                        Timber.w(ex, "Could not get what's on for quick pills")
                         emptyMap()
                     }
-                } else {
-                    emptyMap()
                 }
-            val liveTv =
-                if (pills.any { it.type == QuickPill.Type.GUIDE }) {
-                    try {
-                        navDrawerService
-                            .getAllUserLibraries(userId, tvAccess)
-                            .firstOrNull { it.collectionType == CollectionType.LIVETV }
-                    } catch (ex: Exception) {
-                        Timber.w(ex, "Could not find the live TV library for quick pills")
-                        null
-                    }
-                } else {
-                    null
-                }
-            return pills.mapNotNull { pill ->
+            val resume =
+                if (config.pills.any { it.type == QuickPill.Type.RESUME }) lastWatched(userId) else null
+            return build(userId, config.pills, onNow, resume, resumeKnown = true)
+        }
+
+        private fun build(
+            userId: UUID,
+            pills: List<QuickPill>,
+            onNow: Map<UUID, OnNow>,
+            resume: BaseItem?,
+            resumeKnown: Boolean,
+        ): List<ResolvedPill> =
+            pills.mapNotNull { pill ->
                 when (pill.type) {
                     QuickPill.Type.GUIDE -> {
-                        val library = liveTv ?: return@mapNotNull null
-                        ResolvedPill.Guide(pill.label ?: "Guide", library.itemId, library.type)
+                        val (id, type) = prefs.getString("livetv_$userId", null)?.split('|') ?: return@mapNotNull null
+                        val library = id.toUUIDOrNull() ?: return@mapNotNull null
+                        val kind = runCatching { BaseItemKind.valueOf(type) }.getOrDefault(BaseItemKind.USER_VIEW)
+                        ResolvedPill.Guide(pill.label ?: "Guide", library, kind, artUri(pill.art ?: "guide"))
                     }
 
                     QuickPill.Type.CHANNEL -> {
-                        val channel = channels[pill.number?.trim()] ?: return@mapNotNull null
+                        val id = channelIdFor(pill) ?: return@mapNotNull null
                         ResolvedPill.Channel(
-                            label = pill.label ?: channel.name ?: pill.number.orEmpty(),
-                            number = channel.channelNumber.orEmpty(),
-                            channelId = channel.id,
-                            channelName = channel.name.orEmpty(),
-                            logoUrl = imageUrlService.getItemImageUrl(channel.id, ImageType.PRIMARY, maxHeight = 96),
-                            onNow = channel.currentProgram?.let { program(userId, it) },
+                            label = pill.label ?: pill.number.orEmpty(),
+                            number = pill.number.orEmpty(),
+                            channelId = id,
+                            channelName = pill.channelName ?: prefs.getString("name_$id", null).orEmpty(),
+                            logoUrl = imageUrlService.getItemImageUrl(id, ImageType.PRIMARY, maxHeight = 96),
+                            onNow = onNow[id],
+                            artUri = artUri(pill.art ?: "tv"),
                         )
                     }
 
                     QuickPill.Type.RESUME -> {
-                        val item = lastWatched(userId) ?: return@mapNotNull null
-                        ResolvedPill.Resume(pill.label ?: "Resume", item)
+                        // Kept before the lookup finishes, so the row doesn't jump; hidden only
+                        // once it's known there's nothing to resume
+                        if (resume == null && resumeKnown) return@mapNotNull null
+                        ResolvedPill.Resume(pill.label ?: "Resume", resume)
                     }
                 }
             }
-        }
+
+        private fun channelIdFor(pill: QuickPill): UUID? =
+            if (pill.type != QuickPill.Type.CHANNEL) {
+                null
+            } else {
+                pill.channelId?.toUUIDOrNull()
+                    ?: pill.number?.let { prefs.getString("channel_${it.trim()}", null)?.toUUIDOrNull() }
+            }
 
         /**
-         * What's on, with artwork: the guide data has none, so it comes from the same show or
-         * movie in the library when there is one (eg "Chicago Fire"), else none
+         * Looks up, once, what the config and the device don't know yet: the live TV library and
+         * any channel Scuffed didn't give an id for. Normally nothing; the full channel list is only
+         * fetched when a channel number is new.
          */
-        private suspend fun program(
+        private suspend fun fillMissingIds(
             userId: UUID,
-            dto: BaseItemDto,
-        ): OnNow {
+            tvAccess: Boolean,
+            pills: List<QuickPill>,
+        ) {
+            if (pills.any { it.type == QuickPill.Type.GUIDE } && prefs.getString("livetv_$userId", null) == null) {
+                try {
+                    navDrawerService
+                        .getAllUserLibraries(userId, tvAccess)
+                        .firstOrNull { it.collectionType == CollectionType.LIVETV }
+                        ?.let { prefs.edit().putString("livetv_$userId", "${it.itemId}|${it.type.name}").apply() }
+                } catch (ex: Exception) {
+                    Timber.w(ex, "Could not find the live TV library for quick pills")
+                }
+            }
+            val unknown = pills.filter { it.type == QuickPill.Type.CHANNEL && channelIdFor(it) == null }
+            val unnamed =
+                pills
+                    .filter { it.channelName == null }
+                    .mapNotNull { channelIdFor(it) }
+                    .filter { prefs.getString("name_$it", null) == null }
+            if (unknown.isEmpty() && unnamed.isEmpty()) return
+            try {
+                val channels =
+                    api.liveTvApi
+                        .getLiveTvChannels(GetLiveTvChannelsRequest(userId = userId, enableImages = false))
+                        .content.items
+                val edit = prefs.edit()
+                channels.forEach { channel ->
+                    val number = channel.channelNumber?.trim() ?: return@forEach
+                    if (unknown.any { it.number?.trim() == number }) edit.putString("channel_$number", channel.id.toString())
+                    if (channel.id in unnamed || unknown.any { it.number?.trim() == number }) {
+                        edit.putString("name_${channel.id}", channel.name.orEmpty())
+                    }
+                }
+                edit.apply()
+            } catch (ex: Exception) {
+                Timber.w(ex, "Could not list channels for quick pills")
+            }
+        }
+
+        private fun program(dto: BaseItemDto): OnNow {
             val (title, isNew) = cleanProgramTitle(dto.name.orEmpty())
-            val ownImage =
-                listOf(ImageType.THUMB, ImageType.BACKDROP, ImageType.PRIMARY)
-                    .firstOrNull { dto.imageTags?.get(it) != null || (it == ImageType.BACKDROP && !dto.backdropImageTags.isNullOrEmpty()) }
-                    ?.let { imageUrlService.getItemImageUrl(dto.id, it, maxWidth = 1280) }
             return OnNow(
                 title = title,
                 isNew = isNew,
@@ -135,42 +206,12 @@ class QuickPillsService
                 overview = dto.overview,
                 start = dto.startDate,
                 end = dto.endDate,
-                imageUrl = ownImage ?: libraryBackdrop(userId, title),
+                imageUrl = null,
             )
         }
 
-        private val backdropCache = mutableMapOf<String, String?>()
-
-        /** A backdrop from the series or movie in the library with exactly this title, if any */
-        private suspend fun libraryBackdrop(
-            userId: UUID,
-            title: String,
-        ): String? {
-            if (title.isBlank()) return null
-            backdropCache[title]?.let { return it }
-            if (title in backdropCache) return null
-            val url =
-                try {
-                    api.itemsApi
-                        .getItems(
-                            userId = userId,
-                            searchTerm = title,
-                            includeItemTypes = listOf(BaseItemKind.SERIES, BaseItemKind.MOVIE),
-                            recursive = true,
-                            limit = 5,
-                        ).content.items
-                        .firstOrNull { it.name.equals(title, ignoreCase = true) && !it.backdropImageTags.isNullOrEmpty() }
-                        ?.let { imageUrlService.getItemImageUrl(it.id, ImageType.BACKDROP, maxWidth = 1280) }
-                } catch (ex: Exception) {
-                    Timber.d(ex, "No library match for %s", title)
-                    null
-                }
-            backdropCache[title] = url
-            return url
-        }
-
         /** The newest thing in Continue Watching, else the first Next Up */
-        private suspend fun lastWatched(userId: UUID): BaseItem? =
+        suspend fun lastWatched(userId: UUID): BaseItem? =
             try {
                 latestNextUpService.getResume(userId, 1, includeEpisodes = true).firstOrNull()
                     ?: latestNextUpService
@@ -186,21 +227,35 @@ class QuickPillsService
                 null
             }
 
+        /** A bundled backdrop, as a URI the backdrop's image loader takes */
+        private fun artUri(key: String): String {
+            val res =
+                when (key.lowercase()) {
+                    "guide" -> R.drawable.pill_art_guide
+                    "news" -> R.drawable.pill_art_news
+                    "usa" -> R.drawable.pill_art_usa
+                    "hallmark" -> R.drawable.pill_art_hallmark
+                    "sports" -> R.drawable.pill_art_sports
+                    else -> R.drawable.pill_art_tv
+                }
+            return "android.resource://${context.packageName}/$res"
+        }
+
         companion object {
             const val DISPLAY_PREFS_ID = "gooseflix"
             const val CLIENT = "gooseflix"
             const val PREF_KEY = "quickPills"
 
             /**
-             * The title without the guide's superscript "ᴺᵉʷ" marker, and whether it had one:
+             * The title without the guide's superscript marker, and whether it was "New":
              * "7 News Today  ᴺᵉʷ" is ("7 News Today", true)
              */
             fun cleanProgramTitle(raw: String): Pair<String, Boolean> {
-                fun isMarker(c: Char) = c in '\u02B0'..'\u02FF' || c in '\u1D00'..'\u1DBF'
+                fun isMarker(c: Char) = c in 'ʰ'..'˿' || c in 'ᴀ'..'ᶿ'
                 val marker = raw.filter(::isMarker)
                 val title = raw.filterNot(::isMarker).trim()
                 // ᴺᵉʷ: superscript capital N. Guides also mark "ᴸᶦᵛᵉ", which isn't "new"
-                return title to marker.startsWith('\u1D3A')
+                return title to marker.startsWith('ᴺ')
             }
 
             private val json = Json { ignoreUnknownKeys = true }
@@ -223,8 +278,14 @@ data class QuickPill(
     val type: Type,
     /** Channel number, for [Type.CHANNEL] */
     val number: String? = null,
-    /** What the pill says; defaults to the channel name, "Guide" or "Resume" */
+    /** What the pill says; defaults to the channel number, "Guide" or "Resume" */
     val label: String? = null,
+    /** The channel's Jellyfin id, filled in by Scuffed so the app needn't look it up */
+    val channelId: String? = null,
+    /** The channel's full name (eg "WHDH - News 7 Boston"), also from Scuffed */
+    val channelName: String? = null,
+    /** Which bundled backdrop to use: guide, news, usa, hallmark, sports, tv */
+    val art: String? = null,
 ) {
     @Serializable
     enum class Type {
@@ -257,7 +318,8 @@ sealed interface ResolvedPill {
     data class Guide(
         override val label: String,
         val libraryId: UUID,
-        val libraryType: org.jellyfin.sdk.model.api.BaseItemKind,
+        val libraryType: BaseItemKind,
+        val artUri: String,
     ) : ResolvedPill
 
     data class Channel(
@@ -267,10 +329,12 @@ sealed interface ResolvedPill {
         val channelName: String,
         val logoUrl: String?,
         val onNow: OnNow?,
+        val artUri: String? = null,
     ) : ResolvedPill
 
     data class Resume(
         override val label: String,
-        val item: BaseItem,
+        /** Null until looked up; pressing it then looks it up and plays */
+        val item: BaseItem?,
     ) : ResolvedPill
 }
