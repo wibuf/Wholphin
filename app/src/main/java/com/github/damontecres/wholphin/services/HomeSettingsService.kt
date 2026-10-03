@@ -43,6 +43,7 @@ import com.github.damontecres.wholphin.util.GetStudiosRequestHandler
 import com.github.damontecres.wholphin.util.HomeRowLoadingState
 import com.github.damontecres.wholphin.util.HomeRowLoadingState.Success
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.firstOrNull
@@ -60,6 +61,7 @@ import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.api.client.extensions.liveTvApi
 import org.jellyfin.sdk.api.client.extensions.userApi
 import org.jellyfin.sdk.api.client.extensions.userLibraryApi
+import org.jellyfin.sdk.api.client.extensions.userViewsApi
 import org.jellyfin.sdk.model.DateTime
 import org.jellyfin.sdk.model.UUID
 import org.jellyfin.sdk.model.api.BaseItemKind
@@ -81,6 +83,7 @@ import org.jellyfin.sdk.model.api.request.GetStudiosRequest
 import timber.log.Timber
 import java.io.File
 import java.time.LocalDateTime
+import java.time.ZoneOffset
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -103,6 +106,7 @@ class HomeSettingsService
         private val moonbaseGamesService: MoonbaseGamesService,
         private val gameRecencyStore: GameRecencyStore,
         private val gameArtworkService: GameArtworkService,
+        private val newHomeRows: NewHomeRows,
     ) {
         @OptIn(ExperimentalSerializationApi::class)
         val jsonParser =
@@ -246,9 +250,10 @@ class HomeSettingsService
             val resolvedSettings =
                 if (settings != null) {
                     Timber.v("Found settings")
+                    val rows = withNewLibraryRows(userId, settings)
                     // Resolve
                     val resolvedRows =
-                        settings.rows.mapIndexed { index, config ->
+                        rows.mapIndexed { index, config ->
                             resolve(index, config)
                         }
                     HomePageResolvedSettings(resolvedRows)
@@ -329,6 +334,54 @@ class HomeSettingsService
             val rowConfig = continueWatchingRow + includedIds + gameRows
             return HomePageResolvedSettings(rowConfig)
         }
+
+        /**
+         * Fork-only: [settings]' rows plus rows for libraries that arrived after they were saved
+         * (see [NewHomeRows]), saving any added rows locally. Falls back to the saved rows as they
+         * are if the libraries can't be listed.
+         */
+        private suspend fun withNewLibraryRows(
+            userId: UUID,
+            settings: HomePageSettings,
+        ): List<HomeRowConfig> =
+            try {
+                val userDto = serverRepository.currentUserDto?.takeIf { it.id == userId }
+                val created =
+                    api.userViewsApi
+                        .getUserViews(userId = userId)
+                        .content.items
+                        .associate { it.id to it.dateCreated?.toInstant(ZoneOffset.UTC) }
+                val libraries =
+                    navDrawerService
+                        .getAllUserLibraries(userId, userDto?.tvAccess ?: false)
+                        .filter { it.collectionType != CollectionType.LIVETV }
+                        .map {
+                            NewHomeRows.LibraryView(
+                                id = it.itemId,
+                                isTvShows = it.collectionType == CollectionType.TVSHOWS,
+                                createdAt = created[it.itemId],
+                                viewOptions = viewOptionsForCollectionType(it.collectionType),
+                            )
+                        }
+                val plan =
+                    NewHomeRows.plan(
+                        rows = settings.rows,
+                        libraries = libraries,
+                        gameLibraries = moonbaseGamesService.libraries(),
+                        record = newHomeRows.record(userId),
+                    )
+                if (plan.changed) {
+                    Timber.i("Adding home rows for new libraries: %s", plan.rows - settings.rows.toSet())
+                    saveToLocal(userId, settings.copy(rows = plan.rows))
+                }
+                newHomeRows.save(userId, plan.record)
+                plan.visible
+            } catch (ex: CancellationException) {
+                throw ex
+            } catch (ex: Exception) {
+                Timber.w(ex, "Could not check for new libraries")
+                settings.rows
+            }
 
         /**
          * Create home page settings from the user's web UI home page settings

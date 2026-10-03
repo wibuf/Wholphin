@@ -47,15 +47,14 @@ class MoonbaseGamesService
          */
         suspend fun libraries(refresh: Boolean = false): List<GameLibrary> {
             if (!refresh) librariesCache?.let { return it }
-            val result =
-                try {
-                    getJson<List<GameLibrary>>("/Moonfin/Games/Libraries") ?: emptyList()
-                } catch (ex: Exception) {
-                    Timber.d(ex, "Could not list game libraries")
-                    emptyList()
-                }
-            librariesCache = result
-            return result
+            return try {
+                (getJson<List<GameLibrary>>("/Moonfin/Games/Libraries") ?: emptyList())
+                    .also { librariesCache = it }
+            } catch (ex: Exception) {
+                // Not cached: a slow or failed first request mustn't hide games until a restart
+                Timber.d(ex, "Could not list game libraries")
+                emptyList()
+            }
         }
 
         fun clear() {
