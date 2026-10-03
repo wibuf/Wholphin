@@ -26,6 +26,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -55,6 +56,7 @@ import com.github.damontecres.wholphin.data.model.QuickDetailsData
 import com.github.damontecres.wholphin.games.ui.GameHomeHeader
 import com.github.damontecres.wholphin.games.ui.GamesHomeRow
 import com.github.damontecres.wholphin.preferences.UserPreferences
+import com.github.damontecres.wholphin.services.ResolvedPill
 import com.github.damontecres.wholphin.ui.Cards
 import com.github.damontecres.wholphin.ui.cards.BannerCard
 import com.github.damontecres.wholphin.ui.cards.BannerCardWithTitle
@@ -91,6 +93,7 @@ import com.github.damontecres.wholphin.ui.util.ScrollToTopBringIntoViewSpec
 import com.github.damontecres.wholphin.util.HomeRowLoadingState
 import com.github.damontecres.wholphin.util.LoadingState
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
 import org.jellyfin.sdk.model.DateTime
 import org.jellyfin.sdk.model.api.BaseItemKind
 import timber.log.Timber
@@ -228,6 +231,7 @@ fun HomePage(
                 showLogo = preferences.appPreferences.interfacePreferences.showLogos,
                 showViewMore = true,
                 onClickViewMore = onClickViewMore,
+                showQuickPills = true,
                 modifier = modifier,
             )
             overviewDialog?.let { info ->
@@ -301,7 +305,30 @@ fun HomePageContent(
         )
     },
     onClickViewMore: (RowColumn, HomeRowLoadingState.Success) -> Unit = { _, _ -> },
+    showQuickPills: Boolean = false,
 ) {
+    // Fork (GooseFlix #1421): an optional first row of one-press pills, for accounts that have them
+    val pillsViewModel: QuickPillsViewModel? = if (showQuickPills) hiltViewModel() else null
+    val noPills = remember { MutableStateFlow<List<ResolvedPill>>(emptyList()) }
+    val pills by (pillsViewModel?.pills ?: noPills).collectAsState()
+    if (pillsViewModel != null) {
+        LifecycleStartEffect(pillsViewModel) {
+            pillsViewModel.load()
+            onStopOrDispose { }
+        }
+    }
+    var focusedPill by remember { mutableStateOf<ResolvedPill?>(null) }
+    val pillsFocusRequester = remember { FocusRequester() }
+    var pillsTookFocus by rememberSaveable { mutableStateOf(false) }
+    if (takeFocus) {
+        LaunchedEffect(pills.isNotEmpty()) {
+            if (pills.isNotEmpty() && !pillsTookFocus) {
+                pillsTookFocus = pillsFocusRequester.tryRequestFocus()
+                listState.scrollToItem(0)
+            }
+        }
+    }
+
     val focusedItem =
         remember(homeRows, position) {
             (homeRows.getOrNull(position.row) as? HomeRowLoadingState.Success)?.items?.getOrNull(
@@ -337,8 +364,9 @@ fun HomePageContent(
             }
         }
     }
-    LaunchedEffect(onUpdateBackdrop, focusedItem) {
-        focusedItem?.let { onUpdateBackdrop.invoke(it) }
+    LaunchedEffect(onUpdateBackdrop, focusedItem, focusedPill == null) {
+        // Also on leaving the pills, whose backdrop would otherwise stay up behind the row item
+        if (focusedPill == null) focusedItem?.let { onUpdateBackdrop.invoke(it) }
     }
     Box(modifier = modifier) {
         Column(
@@ -357,7 +385,10 @@ fun HomePageContent(
                         row.games.getOrNull(position.column)?.let { row.libraryId to it }
                     }
                 }
-            if (focusedGame != null) {
+            val pill = focusedPill
+            if (pill != null) {
+                QuickPillHeader(pill, showLogo, HeaderUtils.modifier)
+            } else if (focusedGame != null) {
                 GameHomeHeader(focusedGame.first, focusedGame.second, HeaderUtils.modifier)
             } else {
                 headerComposable.invoke(focusedItem)
@@ -386,6 +417,23 @@ fun HomePageContent(
                         Modifier
                             .focusRestorer(),
                 ) {
+                    if (pills.isNotEmpty()) {
+                        item(key = "quick_pills") {
+                            QuickPillsRow(
+                                pills = pills,
+                                onFocusPill = {
+                                    focusedPill = it
+                                    pillsViewModel?.onFocus(it)
+                                },
+                                onClickPill = { pillsViewModel?.onClick(it) },
+                                focusRequester = pillsFocusRequester,
+                                modifier =
+                                    Modifier
+                                        .padding(bottom = 8.dp)
+                                        .onFocusChanged { if (!it.hasFocus) focusedPill = null },
+                            )
+                        }
+                    }
                     itemsIndexed(homeRows) { rowIndex, row ->
                         val rowModifier =
                             Modifier

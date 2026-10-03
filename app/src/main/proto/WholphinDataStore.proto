@@ -123,6 +123,10 @@ message HomePagePreferences{
   bool combine_continue_next = 3 [deprecated = true];
   int32 max_days_next_up = 4;
   bool click_to_play = 5;
+
+  // Fork fields start at 500 so upstream's sequential numbering never collides with them.
+  // Hides this device's quick pills row (GooseFlix #1421); off, the default, shows it
+  bool hide_quick_pills = 500;
 }
 
 enum ThemeSongVolume {

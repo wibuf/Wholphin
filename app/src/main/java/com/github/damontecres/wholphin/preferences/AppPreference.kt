@@ -217,6 +217,19 @@ sealed interface AppPreference<Pref, T> {
                 summaryOff = R.string.disabled,
             )
 
+        // Fork-only (GooseFlix #1421): the row only exists for accounts given pills in Scuffed
+        val ShowQuickPills =
+            AppSwitchPreference<AppPreferences>(
+                title = R.string.show_quick_pills,
+                defaultValue = true,
+                getter = { !it.homePagePreferences.hideQuickPills },
+                setter = { prefs, value ->
+                    prefs.updateHomePagePreferences { hideQuickPills = !value }
+                },
+                summaryOn = R.string.show_quick_pills_on,
+                summaryOff = R.string.disabled,
+            )
+
         val HomeClickToPlay =
             AppChoicePreference<AppPreferences, Boolean>(
                 title = R.string.continue_watching_click_behavior,
