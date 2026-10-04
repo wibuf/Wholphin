@@ -222,6 +222,54 @@ class PlaybackViewModel
                 }
         }
 
+        /** Seconds left on the live TV "Still watching?" prompt, or null when it isn't showing */
+        val stillWatchingSeconds = MutableStateFlow<Int?>(null)
+
+        private var passOutJob: Job? = null
+
+        /**
+         * Fork: runs the live TV passout check only while a channel is actually playing, so it
+         * isn't left running for anything else (or waiting forever in tests)
+         */
+        private fun updateLiveTvPassout(isPlaying: Boolean) {
+            val live = this::currentItem.isInitialized && currentItem.item.type.isLiveTvStream
+            if (isPlaying && live) {
+                if (passOutJob?.isActive != true) passOutJob = viewModelScope.launch { watchLiveTvPassout() }
+            } else if (stillWatchingSeconds.value == null) {
+                passOutJob?.cancel()
+                passOutJob = null
+            }
+        }
+
+        /**
+         * Fork: passout protection for live TV, see [LiveTvPassout]. Checks while a channel is
+         * playing; once due, counts down the prompt and stops unless a button is pressed.
+         */
+        private suspend fun watchLiveTvPassout() {
+            while (true) {
+                delay(LiveTvPassout.CHECK_INTERVAL_MS)
+                if (!this::preferences.isInitialized || !this::player.isInitialized) continue
+                val passOutMs = preferences.appPreferences.playbackPreferences.passOutProtectionMs
+                if (!LiveTvPassout.isDue(Date().time, lastInteractionDate.time, passOutMs)) continue
+                Timber.i("Live TV passout: no input for %s ms, asking", passOutMs)
+                val asked = lastInteractionDate
+                var secondsLeft = LiveTvPassout.PROMPT_SECONDS
+                while (secondsLeft > 0 && lastInteractionDate == asked) {
+                    stillWatchingSeconds.value = secondsLeft
+                    delay(1000)
+                    secondsLeft--
+                }
+                stillWatchingSeconds.value = null
+                if (lastInteractionDate == asked) {
+                    Timber.i("Live TV passout: no answer, stopping")
+                    // Leave first: stopping ends playback, which ends this check
+                    navigationManager.goBack()
+                    player.stop()
+                    return
+                }
+            }
+        }
+
         private fun disconnectPlayer() {
             if (this@PlaybackViewModel::player.isInitialized) {
                 player.removeListener(this@PlaybackViewModel)
@@ -1318,6 +1366,7 @@ class PlaybackViewModel
         fun reportInteraction() {
 //            Timber.v("reportInteraction")
             lastInteractionDate = Date()
+            stillWatchingSeconds.value = null
         }
 
         fun shouldAutoPlayNextUp(): Boolean =
@@ -1866,6 +1915,7 @@ class PlaybackViewModel
 
         override fun onIsPlayingChanged(isPlaying: Boolean) {
             screensaverService.keepScreenOn(isPlaying)
+            updateLiveTvPassout(isPlaying)
         }
 
         override fun onAvailableCommandsChanged(availableCommands: Player.Commands) {

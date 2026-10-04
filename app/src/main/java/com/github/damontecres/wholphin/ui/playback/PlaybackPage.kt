@@ -48,6 +48,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
@@ -332,7 +335,12 @@ fun PlaybackPageContent(
 
     Box(
         modifier
-            .background(if (state.nextUp == null) Color.Black else MaterialTheme.colorScheme.background),
+            // Fork: any button anywhere on the page counts as someone watching (passout
+            // protection), including ones the controls use themselves
+            .onPreviewKeyEvent {
+                if (it.type == KeyEventType.KeyUp) viewModel.reportInteraction()
+                false
+            }.background(if (state.nextUp == null) Color.Black else MaterialTheme.colorScheme.background),
     ) {
         val playerSize by animateFloatAsState(if (state.nextUp == null) 1f else .6f)
         Box(
@@ -692,6 +700,11 @@ fun PlaybackPageContent(
                             ),
                 )
             }
+        }
+        // Fork: live TV passout protection's "Still watching?" prompt
+        val stillWatching by viewModel.stillWatchingSeconds.collectAsState()
+        stillWatching?.let { seconds ->
+            StillWatchingPrompt(secondsLeft = seconds, modifier = Modifier.align(Alignment.Center))
         }
     }
 
