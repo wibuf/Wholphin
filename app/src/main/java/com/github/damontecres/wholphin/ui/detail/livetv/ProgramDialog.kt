@@ -147,7 +147,10 @@ fun ProgramDialog(
                                     .padding(top = 8.dp)
                                     .fillMaxWidth(),
                         ) {
-                            if (now.isAfter(dto.startDate!!) && now.isBefore(dto.endDate!!)) {
+                            // Fork: the channel can be watched from any of its programmes, not
+                            // only the one airing now, eg one opened by mistake an hour ahead
+                            val airing = now.isAfter(dto.startDate!!) && now.isBefore(dto.endDate!!)
+                            if (airing || dto.channelId != null) {
                                 TextButton(
                                     onClick = { onWatch.invoke(item) },
                                     modifier = Modifier,
@@ -161,7 +164,7 @@ fun ProgramDialog(
                                             contentDescription = stringResource(R.string.delete),
                                         )
                                         Text(
-                                            text = stringResource(R.string.watch_live),
+                                            text = stringResource(if (airing) R.string.watch_live else R.string.watch_channel),
                                         )
                                     }
                                 }
