@@ -38,6 +38,7 @@ import com.github.damontecres.wholphin.data.model.PlaylistItem
 import com.github.damontecres.wholphin.data.model.TrackIndex
 import com.github.damontecres.wholphin.mpv.MpvPlayer
 import com.github.damontecres.wholphin.preferences.AppPreference
+import com.github.damontecres.wholphin.preferences.PassOutScope
 import com.github.damontecres.wholphin.preferences.PlayerBackend
 import com.github.damontecres.wholphin.preferences.ShowNextUpWhen
 import com.github.damontecres.wholphin.preferences.SkipSegmentBehavior
@@ -233,7 +234,10 @@ class PlaybackViewModel
          */
         private fun updateLiveTvPassout(isPlaying: Boolean) {
             val live = this::currentItem.isInitialized && currentItem.item.type.isLiveTvStream
-            if (isPlaying && live) {
+            val coversLiveTv =
+                !this::preferences.isInitialized ||
+                    preferences.appPreferences.playbackPreferences.passOutScope != PassOutScope.PASS_OUT_MEDIA
+            if (isPlaying && live && coversLiveTv) {
                 if (passOutJob?.isActive != true) passOutJob = viewModelScope.launch { watchLiveTvPassout() }
             } else if (stillWatchingSeconds.value == null) {
                 passOutJob?.cancel()
@@ -1372,7 +1376,8 @@ class PlaybackViewModel
         fun shouldAutoPlayNextUp(): Boolean =
             preferences.appPreferences.playbackPreferences.let {
                 it.autoPlayNext &&
-                    if (it.passOutProtectionMs > 0) {
+                    // Fork: unless passout protection is set to cover live TV only
+                    if (it.passOutProtectionMs > 0 && it.passOutScope != PassOutScope.PASS_OUT_LIVE_TV) {
                         (Date().time - lastInteractionDate.time) < it.passOutProtectionMs
                     } else {
                         true

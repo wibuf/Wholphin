@@ -109,6 +109,15 @@ message PlaybackPreferences {
   // Comma-separated keywords to prioritize or deprioritize subtitle tracks by title
   string subtitle_preferred_keywords = 500;
   string subtitle_avoided_keywords = 501;
+  // What passout protection covers: live TV ("Still watching?" then stop), the next
+  // episode autoplaying, or both (the default, so 0)
+  PassOutScope pass_out_scope = 502;
+}
+
+enum PassOutScope {
+  PASS_OUT_BOTH = 0;
+  PASS_OUT_LIVE_TV = 1;
+  PASS_OUT_MEDIA = 2;
 }
 
 enum DpadSeekMode {

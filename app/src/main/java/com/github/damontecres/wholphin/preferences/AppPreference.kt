@@ -363,6 +363,20 @@ sealed interface AppPreference<Pref, T> {
                 },
             )
 
+        /** Fork: whether passout protection covers live TV, movies and shows, or both */
+        val PassOutProtectionScope =
+            AppChoicePreference<AppPreferences, PassOutScope>(
+                title = R.string.pass_out_protection_scope,
+                defaultValue = PassOutScope.PASS_OUT_BOTH,
+                getter = { it.playbackPreferences.passOutScope },
+                setter = { prefs, value ->
+                    prefs.updatePlaybackPreferences { passOutScope = value }
+                },
+                displayValues = R.array.pass_out_protection_scope_options,
+                indexToValue = { PassOutScope.forNumber(it) ?: PassOutScope.PASS_OUT_BOTH },
+                valueToIndex = { if (it != PassOutScope.UNRECOGNIZED) it.number else 0 },
+            )
+
         const val PASS_OUT_STEP_MINUTES = 30L
 
         fun passOutProtectionMs(steps: Long): Long = (steps * PASS_OUT_STEP_MINUTES).minutes.inWholeMilliseconds
@@ -1197,6 +1211,7 @@ val basicPreferences =
                     AppPreference.AutoPlayNextUp,
                     AppPreference.AutoPlayNextDelay,
                     AppPreference.PassOutProtection,
+                    AppPreference.PassOutProtectionScope,
                 ),
         ),
         PreferenceGroup(

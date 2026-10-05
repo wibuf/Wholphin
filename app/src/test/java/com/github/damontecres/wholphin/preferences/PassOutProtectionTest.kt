@@ -38,4 +38,14 @@ class PassOutProtectionTest {
         assertEquals(90.minutes.inWholeMilliseconds, saved.playbackPreferences.passOutProtectionMs)
         assertEquals(3L, pref.getter(saved))
     }
+
+    @Test
+    fun scopeDefaultsToBothAndRoundTrips() {
+        val scope = AppPreference.PassOutProtectionScope
+        assertEquals(PassOutScope.PASS_OUT_BOTH, scope.getter(stored(0)))
+        val saved = scope.setter(stored(0), PassOutScope.PASS_OUT_LIVE_TV)
+        assertEquals(PassOutScope.PASS_OUT_LIVE_TV, scope.getter(saved))
+        assertEquals(1, scope.valueToIndex(PassOutScope.PASS_OUT_LIVE_TV))
+        assertEquals(PassOutScope.PASS_OUT_MEDIA, scope.indexToValue(2))
+    }
 }

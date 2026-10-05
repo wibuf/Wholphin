@@ -346,6 +346,12 @@
     <string name="nav_drawer_switch_on_focus_summary_off">Click to switch pages</string>
     <string name="nav_drawer_switch_on_focus">Switch nav drawer pages on focus</string>
     <string name="pass_out_protection">Passout Protection</string>
+    <string name="pass_out_protection_scope">Passout Protection applies to</string>
+    <string-array name="pass_out_protection_scope_options">
+        <item>Live TV and shows/movies</item>
+        <item>Live TV only</item>
+        <item>Shows and movies only</item>
+    </string-array>
     <string name="play_theme_music">Play theme music</string>
     <string name="playback_overrides">Playback overrides</string>
     <string name="remember_selected_tab">Remember selected tabs</string>
