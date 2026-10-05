@@ -144,7 +144,7 @@ fun SearchPageCard(
                 imageHeight = Cards.height2x3,
                 showImageOverlay = true,
                 modifier = modifier,
-                // Fork: "2026 · HBO Max" when the same title is in more than one library
+                // Fork: the library ("HBO Max") instead of the year when the same title is in more than one
                 subtitle = if (library != null) SearchLibraries.subtitle(item?.subtitle, library) else item?.subtitle,
             )
         }

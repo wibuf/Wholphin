@@ -28,10 +28,11 @@ class SearchLibrariesTest {
     }
 
     @Test
-    fun `the library goes after the year`() {
-        assertEquals("2026 · HBO Max", SearchLibraries.subtitle("2026", "HBO Max"))
+    fun `the library replaces the year`() {
+        assertEquals("HBO Max", SearchLibraries.subtitle("2026", "HBO Max"))
         assertEquals("HBO Max", SearchLibraries.subtitle(null, "HBO Max"))
         assertEquals("2026", SearchLibraries.subtitle("2026", null))
-        assertNull(SearchLibraries.subtitle(" ", null))
+        assertEquals("2026", SearchLibraries.subtitle("2026", " "))
+        assertNull(SearchLibraries.subtitle(null, null))
     }
 }

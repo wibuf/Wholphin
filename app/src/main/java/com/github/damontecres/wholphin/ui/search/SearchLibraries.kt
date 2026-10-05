@@ -7,7 +7,8 @@ import java.util.UUID
 /**
  * Fork: which library a search result is in, for titles that are in more than one. Searching
  * "Supergirl" can find the same movie in Movies, 4K, Cams and HBO Max, four identical cards with
- * no way to tell them apart, so those get the library name after the year ("2026 · HBO Max").
+ * no way to tell them apart, so those show the library name in place of the year ("HBO Max"):
+ * the year is the same on all of them, and "2026 · HBO Max" was cut off under a narrow card.
  * Only duplicates are looked up (one small request each), so a normal search costs nothing extra.
  */
 object SearchLibraries {
@@ -23,9 +24,9 @@ object SearchLibraries {
             .flatten()
             .map { it.id }
 
-    /** "2026 · HBO Max", or whichever part there is */
+    /** The library's name when there is one, else the card's usual line (the year) */
     fun subtitle(
         subtitle: String?,
         library: String?,
-    ): String? = listOfNotNull(subtitle?.ifBlank { null }, library?.ifBlank { null }).joinToString(" · ").ifEmpty { null }
+    ): String? = library?.ifBlank { null } ?: subtitle
 }
