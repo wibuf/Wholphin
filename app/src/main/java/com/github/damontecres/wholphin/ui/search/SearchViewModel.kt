@@ -42,6 +42,8 @@ import com.github.damontecres.wholphin.util.WholphinDispatchers
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -53,6 +55,7 @@ import kotlinx.coroutines.launch
 import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.api.client.extensions.artistsApi
 import org.jellyfin.sdk.api.client.extensions.itemsApi
+import org.jellyfin.sdk.api.client.extensions.libraryApi
 import org.jellyfin.sdk.api.client.extensions.personsApi
 import org.jellyfin.sdk.api.client.extensions.userLibraryApi
 import org.jellyfin.sdk.model.api.BaseItemKind
@@ -284,6 +287,7 @@ class SearchViewModel
                         )
                     Timber.v("Search finished for %s, %s results", type, sorted.size)
                     _state.value.results[type] = SearchResult.Success(sorted)
+                    labelDuplicates(sorted)
                 } catch (ex: CancellationException) {
                     throw ex
                 } catch (ex: Exception) {
@@ -317,10 +321,43 @@ class SearchViewModel
                         )
                     Timber.v("searchCombined complete %s results", sorted.size)
                     _state.update { it.copy(combinedResults = SearchResult.Success(sorted)) }
+                    labelDuplicates(sorted)
                 } catch (ex: Exception) {
                     Timber.e(ex, "Exception in combined search")
                     _state.update { it.copy(combinedResults = SearchResult.Error(ex)) }
                 }
+            }
+        }
+
+        /** Fork: library names for results that are in more than one library, see [SearchLibraries] */
+        val libraryNames = MutableStateFlow<Map<UUID, String>>(emptyMap())
+
+        private fun labelDuplicates(items: List<BaseItem>) {
+            val ids = SearchLibraries.duplicateIds(items).filter { it !in libraryNames.value }
+            if (ids.isEmpty()) return
+            val userId = serverRepository.currentUser?.id
+            viewModelScope.launchIO {
+                val found =
+                    ids
+                        .map { id ->
+                            async {
+                                try {
+                                    api.libraryApi
+                                        .getAncestors(itemId = id, userId = userId)
+                                        .content
+                                        .firstOrNull { it.type == BaseItemKind.COLLECTION_FOLDER }
+                                        ?.name
+                                        ?.let { id to it }
+                                } catch (ex: CancellationException) {
+                                    throw ex
+                                } catch (ex: Exception) {
+                                    Timber.w(ex, "Could not find the library of %s", id)
+                                    null
+                                }
+                            }
+                        }.awaitAll()
+                        .filterNotNull()
+                libraryNames.update { it + found }
             }
         }
 

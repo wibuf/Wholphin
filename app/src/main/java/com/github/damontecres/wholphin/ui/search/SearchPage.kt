@@ -114,6 +114,7 @@ fun SearchPage(
         remember(state.includedSearchableTypes.size) { List(RESULTS_START + state.includedSearchableTypes.size) { FocusRequester() } }
 
     val seerrActive by viewModel.seerrActive.collectAsState()
+    val libraryNames by viewModel.libraryNames.collectAsState()
     var selectedTab by rememberSaveable(seerrActive, state.discoverEnabled) { mutableIntStateOf(0) }
     var showViewOptions by rememberSaveable { mutableStateOf(false) }
     var showFilterTypeDialog by rememberSaveable { mutableStateOf(false) }
@@ -376,6 +377,7 @@ fun SearchPage(
                 isLibraryTab && combinedMode -> {
                     SearchCombinedResults(
                         result = state.combinedResults,
+                        libraryNames = libraryNames,
                         focusRequester = focusRequesters[COMBINED_ROW],
                         onClickItem = onClickItem,
                         onLongClickItem = { index, item ->
@@ -438,6 +440,7 @@ fun SearchPage(
                                     SearchPageCard(
                                         item = item,
                                         type = type,
+                                        library = item?.let { libraryNames[it.id] },
                                         onClick = {
                                             setPosition(RowColumn(rowIndex, index))
                                             onClick.invoke()
@@ -546,6 +549,7 @@ fun SearchCombinedResults(
     onClickDiscover: (Int, DiscoverItem) -> Unit,
     positionCallback: (columns: Int, position: Int) -> Unit,
     modifier: Modifier = Modifier,
+    libraryNames: Map<java.util.UUID, String> = emptyMap(),
 ) {
     when (result) {
         SearchResult.NoQuery -> {}
@@ -590,6 +594,10 @@ fun SearchCombinedResults(
                             onLongClick = details.onLongClick,
                             modifier = details.mod,
                             fillWidth = details.widthPx,
+                            subtitle =
+                                details.item?.let { libraryNames[it.id] }?.let {
+                                    SearchLibraries.subtitle(details.item.subtitle, it)
+                                } ?: details.item?.subtitle,
                         )
                     },
                     modifier = modifier,

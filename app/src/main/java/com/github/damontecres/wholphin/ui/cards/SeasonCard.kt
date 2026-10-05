@@ -50,11 +50,12 @@ fun SeasonCard(
     interactionSource: MutableInteractionSource = remember { MutableInteractionSource() },
     showImageOverlay: Boolean = false,
     aspectRatio: Float = item?.aspectRatio ?: AspectRatios.TALL,
+    subtitle: String? = item?.subtitle,
 ) {
     val imageUrl = rememberImageUrl(item, imageHeight, imageWidth)
     SeasonCard(
         title = item?.title,
-        subtitle = item?.subtitle,
+        subtitle = subtitle,
         name = item?.name,
         imageUrl = imageUrl,
         isFavorite = item?.data?.userData?.isFavorite ?: false,

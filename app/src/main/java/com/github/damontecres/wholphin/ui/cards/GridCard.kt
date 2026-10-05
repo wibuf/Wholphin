@@ -49,6 +49,7 @@ fun GridCard(
     showTitle: Boolean = true,
     fillWidth: Int? = null,
     fillHeight: Int? = null,
+    subtitle: String? = item?.subtitle,
 ) {
     val dto = item?.data
     val focused by interactionSource.collectIsFocusedAsState()
@@ -120,7 +121,7 @@ fun GridCard(
                             .enableMarquee(focusedAfterDelay),
                 )
                 Text(
-                    text = item?.subtitle ?: "",
+                    text = subtitle ?: "",
                     maxLines = 1,
                     textAlign = TextAlign.Center,
                     style = MaterialTheme.typography.bodySmall,

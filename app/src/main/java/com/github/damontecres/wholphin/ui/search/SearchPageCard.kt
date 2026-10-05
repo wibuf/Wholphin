@@ -29,6 +29,7 @@ fun SearchPageCard(
     onClick: () -> Unit,
     onLongClick: () -> Unit,
     modifier: Modifier = Modifier,
+    library: String? = null,
 ) {
     val context = LocalContext.current
     when (type) {
@@ -143,6 +144,8 @@ fun SearchPageCard(
                 imageHeight = Cards.height2x3,
                 showImageOverlay = true,
                 modifier = modifier,
+                // Fork: "2026 · HBO Max" when the same title is in more than one library
+                subtitle = if (library != null) SearchLibraries.subtitle(item?.subtitle, library) else item?.subtitle,
             )
         }
     }
