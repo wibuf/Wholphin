@@ -198,7 +198,7 @@ class GamePlayerViewModel
                     withContext(WholphinDispatchers.IO) {
                         bridge.load(
                             core = core.coreId,
-                            corePath = corePath.path,
+                            corePath = corePath,
                             romPath = contentPath.path,
                             systemDir = systemDir.path,
                             saveDir = saveDir.path,

@@ -402,6 +402,7 @@
     <string name="game_core_downloading">Downloading %1$s core… %2$d%%</string>
     <string name="game_core_row_downloading">Downloading… %1$d%%</string>
     <string name="game_core_installed">Installed</string>
+    <string name="game_core_included">Included with the app</string>
     <string name="game_core_not_installed">Not installed (~%1$d MB)</string>
     <string name="game_core_unavailable">No core build for this device</string>
     <string name="game_system_unsupported">This system (%1$s) is not supported yet</string>

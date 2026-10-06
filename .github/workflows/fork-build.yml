@@ -82,7 +82,9 @@ jobs:
         run: |
           ./gradlew assembleDefaultRelease -PforkBuild --no-daemon
           # The Google Play build: the TV-only "appstore" flavour, updated by Play rather than
-          # by itself, as an app bundle for the Play Console's internal testing track
+          # by itself, as an app bundle for the Play Console. Play doesn't allow downloading
+          # native code, so its game cores are fetched now and packed inside the app.
+          scripts/fetch-libretro-cores.sh
           ./gradlew bundleAppstoreRelease -PforkBuild --no-daemon
 
       - name: Verify APK signatures

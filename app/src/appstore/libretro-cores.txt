@@ -1,0 +1,23 @@
+# Libretro cores bundled into the Google Play build (fork). Google Play doesn't allow downloading
+# native code, so the appstore build ships these inside the app instead of fetching them from the
+# libretro buildbot like the other builds. scripts/fetch-libretro-cores.sh reads this file.
+#
+# <core id as in GameCores.catalog> <buildbot file name>
+# Must list every core in GameCores.catalog (GameCoresCatalogTest checks it).
+fceumm fceumm
+snes9x snes9x
+gambatte gambatte
+mgba mgba
+genesis_plus_gx genesis_plus_gx
+pcsx_rearmed pcsx_rearmed
+fbneo fbneo
+mupen64plus_next mupen64plus_next_gles3
+ppsspp ppsspp
+melonds melonds
+mednafen_pce_fast mednafen_pce_fast
+stella stella
+prosystem prosystem
+handy handy
+mednafen_wswan mednafen_wswan
+mednafen_ngp mednafen_ngp
+mednafen_vb mednafen_vb

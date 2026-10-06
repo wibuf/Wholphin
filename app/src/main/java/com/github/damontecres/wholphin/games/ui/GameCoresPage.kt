@@ -41,6 +41,8 @@ data class CoreRow(
     val core: GameCore,
     val installed: Boolean,
     val available: Boolean,
+    /** Shipped inside the app (Google Play build): nothing to download or remove */
+    val bundled: Boolean = false,
     val progress: Float? = null,
     val error: String? = null,
 )
@@ -59,7 +61,12 @@ class GameCoresViewModel
 
         private fun rows() =
             GameCores.catalog.map {
-                CoreRow(core = it, installed = cores.isInstalled(it.coreId), available = cores.isAvailable(it))
+                CoreRow(
+                    core = it,
+                    installed = cores.isInstalled(it.coreId),
+                    available = cores.isAvailable(it),
+                    bundled = cores.isBundled(it.coreId),
+                )
             }
 
         private fun updateRow(
@@ -68,7 +75,7 @@ class GameCoresViewModel
         ) = _state.update { list -> list.map { if (it.core.coreId == coreId) block(it) else it } }
 
         fun toggle(row: CoreRow) {
-            if (row.progress != null || !row.available) return
+            if (row.progress != null || !row.available || row.bundled) return
             if (row.installed) {
                 cores.remove(row.core)
                 updateRow(row.core.coreId) { it.copy(installed = false) }
@@ -115,6 +122,7 @@ fun GameCoresPage(
                     when {
                         row.progress != null -> stringResource(R.string.game_core_row_downloading, (row.progress * 100).toInt())
                         row.error != null -> row.error
+                        row.bundled -> stringResource(R.string.game_core_included)
                         !row.available -> stringResource(R.string.game_core_unavailable)
                         row.installed -> stringResource(R.string.game_core_installed)
                         else -> stringResource(R.string.game_core_not_installed, row.core.approxSizeMb)

@@ -1,5 +1,6 @@
 package com.github.damontecres.wholphin.games
 
+import com.github.damontecres.wholphin.BuildConfig
 import com.github.damontecres.wholphin.services.hilt.StandardOkHttpClient
 import com.github.damontecres.wholphin.util.WholphinDispatchers
 import kotlinx.coroutines.withContext
@@ -18,6 +19,10 @@ import javax.inject.Singleton
  * Cores are not bundled: they are large, GPL'd separately, and updated nightly, so the user
  * picks which systems to add and the app fetches them on demand. Installed means the core file
  * is on disk, so there is no separate registry to fall out of sync.
+ *
+ * Fork: except in the Google Play build, where Play doesn't allow downloading native code. There
+ * the cores ship inside the app ([BUNDLED]), are loaded by library name from the app itself, and
+ * nothing is ever downloaded ([DOWNLOADS] is off).
  */
 @Singleton
 class CoreDownloadService
@@ -26,16 +31,23 @@ class CoreDownloadService
         private val storage: GameStorage,
         @param:StandardOkHttpClient private val okHttpClient: OkHttpClient,
     ) {
-        /** The path of an installed core, or null when it is not downloaded yet */
-        fun installedCorePath(coreId: String): File? {
+        /**
+         * What to load for a core: a bundled core's library name, which the loader finds inside
+         * the app, or the path of a downloaded one. Null when it isn't on the device.
+         */
+        fun installedCorePath(coreId: String): String? {
+            if (isBundled(coreId)) return bundledLibraryName(coreId)
             val abi = GameCores.buildbotAbi() ?: return null
-            return File(storage.coresDir(abi), GameCores.coreFileName(coreId)).takeIf { it.isFile }
+            return File(storage.coresDir(abi), GameCores.coreFileName(coreId)).takeIf { it.isFile }?.path
         }
 
         fun isInstalled(coreId: String): Boolean = installedCorePath(coreId) != null
 
-        /** Whether libretro publishes a build of the core for this device */
-        fun isAvailable(core: GameCore): Boolean = GameCores.downloadUrl(core) != null
+        /** Shipped inside the app (Google Play build), so never downloaded or removed */
+        fun isBundled(coreId: String): Boolean = coreId in BUNDLED
+
+        /** Whether the core can be had on this device: bundled, or a download libretro publishes */
+        fun isAvailable(core: GameCore): Boolean = isBundled(core.coreId) || (DOWNLOADS && GameCores.downloadUrl(core) != null)
 
         /**
          * Download the core, extract it into the cores directory, and install any support files
@@ -45,6 +57,7 @@ class CoreDownloadService
             core: GameCore,
             onProgress: (Float) -> Unit = {},
         ) = withContext(WholphinDispatchers.IO) {
+            if (!DOWNLOADS) throw IOException("${core.systemName} isn't included in this version of the app")
             val url = GameCores.downloadUrl(core) ?: throw IOException("No core build for this device")
             val abi = GameCores.buildbotAbi()!!
             val dest = File(storage.coresDir(abi), GameCores.coreFileName(core.coreId))
@@ -102,7 +115,8 @@ class CoreDownloadService
 
         /** Delete the installed core file and its support files */
         fun remove(core: GameCore) {
-            installedCorePath(core.coreId)?.delete()
+            if (isBundled(core.coreId)) return
+            installedCorePath(core.coreId)?.let(::File)?.delete()
             core.supportFiles?.let { File(storage.systemDir(), it.folder).deleteRecursively() }
         }
 
@@ -191,5 +205,19 @@ class CoreDownloadService
                     }
                 }
             }
+
+            /** Fork: whether this build may download cores (off for Google Play) */
+            val DOWNLOADS: Boolean = BuildConfig.CORE_DOWNLOADS
+
+            /** Fork: core ids shipped inside the app, from the build */
+            val BUNDLED: Set<String> =
+                BuildConfig.BUNDLED_CORES
+                    .split(',')
+                    .map { it.trim() }
+                    .filter { it.isNotEmpty() }
+                    .toSet()
+
+            /** The library name a bundled core is packaged under, which dlopen finds in the app */
+            fun bundledLibraryName(coreId: String): String = "lib${coreId}_libretro.so"
         }
     }

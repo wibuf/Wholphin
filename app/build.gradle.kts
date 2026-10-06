@@ -177,24 +177,42 @@ configure<ApplicationExtension> {
         ) {
             this.buildConfigField("boolean", name, "Boolean.parseBoolean(\"${enabled}\")")
         }
+        // Fork: game cores. Google Play doesn't allow downloading native code, so the appstore
+        // build ships the cores inside the app instead (see app/src/appstore/libretro-cores.txt and
+        // scripts/fetch-libretro-cores.sh) and never downloads them. BUNDLED_CORES lists the core
+        // ids whose .so files were present for the build.
+        val featureCoreDownloads = "CORE_DOWNLOADS"
+        val bundledCores =
+            file("src/appstore/jniLibs/arm64-v8a")
+                .listFiles()
+                .orEmpty()
+                .mapNotNull { Regex("^lib(.+)_libretro\\.so$").find(it.name)?.groupValues?.get(1) }
+                .sorted()
+                .joinToString(",")
         create("default") {
             dimension = "version"
             isDefault = true
             manifestPlaceholders += mapOf(featureLeanback to false)
             setFeatureFlag(featureUpdate, true)
             setFeatureFlag(featureDiscover, true)
+            setFeatureFlag(featureCoreDownloads, true)
+            buildConfigField("String", "BUNDLED_CORES", "\"\"")
         }
         create("appstore") {
             dimension = "version"
             manifestPlaceholders += mapOf(featureLeanback to true)
             setFeatureFlag(featureUpdate, false)
             setFeatureFlag(featureDiscover, true)
+            setFeatureFlag(featureCoreDownloads, false)
+            buildConfigField("String", "BUNDLED_CORES", "\"$bundledCores\"")
         }
         create("firetv") {
             dimension = "version"
             manifestPlaceholders += mapOf(featureLeanback to true)
             setFeatureFlag(featureUpdate, false)
             setFeatureFlag(featureDiscover, false)
+            setFeatureFlag(featureCoreDownloads, true)
+            buildConfigField("String", "BUNDLED_CORES", "\"\"")
         }
     }
     compileOptions {
@@ -265,6 +283,14 @@ configure<ApplicationExtension> {
 }
 
 androidComponents {
+    // Fork: the Google Play build of GooseFlix has its own permanent app id. The sideloaded
+    // builds keep .fork until they can hand their sign-in over to the new id, so they aren't
+    // stranded on a package their updater would refuse.
+    if (project.hasProperty("forkBuild")) {
+        onVariants(selector().withFlavor("version" to "appstore").withBuildType("release")) { variant ->
+            variant.applicationId.set("bot.grit.gooseflix")
+        }
+    }
     onVariants(selector().all()) { variant ->
         variant.outputs
             .map { it as com.android.build.api.variant.impl.VariantOutputImpl }
