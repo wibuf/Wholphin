@@ -60,6 +60,10 @@ class UserSwitchListener
                     AppCompatDelegate.setApplicationLocales(localeList)
                 }
 
+                // Fork: drop the previous user's rows first. Until the new user's settings load,
+                // the home page would otherwise fetch the old rows with the new user's sign-in,
+                // eg another person's "Recently added in Movies" on an account without Movies.
+                homeSettingsService.currentSettings.value = HomePageResolvedSettings.EMPTY
                 // Check for home settings
                 launchIO {
                     homeSettingsService.loadCurrentSettings(user.id)

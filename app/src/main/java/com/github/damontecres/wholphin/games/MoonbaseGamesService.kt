@@ -1,5 +1,6 @@
 package com.github.damontecres.wholphin.games
 
+import com.github.damontecres.wholphin.data.ServerRepository
 import com.github.damontecres.wholphin.games.model.GameDetail
 import com.github.damontecres.wholphin.games.model.GameLibrary
 import com.github.damontecres.wholphin.games.model.GameSummary
@@ -14,9 +15,11 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.api.client.HttpMethod
+import org.jellyfin.sdk.api.client.extensions.userViewsApi
 import timber.log.Timber
 import java.io.File
 import java.io.IOException
+import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -34,22 +37,42 @@ class MoonbaseGamesService
     constructor(
         private val api: ApiClient,
         @param:AuthOkHttpClient private val okHttpClient: OkHttpClient,
+        private val serverRepository: ServerRepository,
     ) {
         private val json = Json { ignoreUnknownKeys = true }
 
-        // Whether the current server has the plugin at all, so the nav drawer can ask cheaply
+        // Whether the current server has the plugin at all, so the nav drawer can ask cheaply.
+        // Kept per user: one person's game libraries mustn't carry over to the next sign-in.
         @Volatile
-        private var librariesCache: List<GameLibrary>? = null
+        private var librariesCache: Pair<UUID?, List<GameLibrary>>? = null
 
         /**
-         * The game libraries the server exposes, or an empty list when the plugin is absent, has
-         * games disabled, or the request fails
+         * The game libraries the signed-in user may see, or an empty list when the plugin is
+         * absent, has games disabled, or the request fails
+         *
+         * Fork: the plugin lists every game library to every user, whatever their Jellyfin library
+         * access (a review account with only one movie library still got Video Games). A game
+         * library is the Jellyfin library of the same id, so only the ones in the user's own
+         * views are kept.
          */
         suspend fun libraries(refresh: Boolean = false): List<GameLibrary> {
-            if (!refresh) librariesCache?.let { return it }
+            val userId = serverRepository.currentUser?.id
+            if (!refresh) librariesCache?.takeIf { it.first == userId }?.let { return it.second }
             return try {
-                (getJson<List<GameLibrary>>("/Moonfin/Games/Libraries") ?: emptyList())
-                    .also { librariesCache = it }
+                val all = getJson<List<GameLibrary>>("/Moonfin/Games/Libraries") ?: emptyList()
+                val visible =
+                    if (all.isEmpty() || userId == null) {
+                        emptyList()
+                    } else {
+                        val views =
+                            api.userViewsApi
+                                .getUserViews(userId = userId)
+                                .content.items
+                                .map { it.id.toString() }
+                        visibleGameLibraries(all, views)
+                    }
+                librariesCache = userId to visible
+                visible
             } catch (ex: Exception) {
                 // Not cached: a slow or failed first request mustn't hide games until a restart
                 Timber.d(ex, "Could not list game libraries")
@@ -247,3 +270,16 @@ class MoonbaseGamesService
             private val OCTET_STREAM = "application/octet-stream".toMediaType()
         }
     }
+
+/**
+ * Fork: the game libraries whose ids are among the user's Jellyfin library ids. Ids are compared
+ * without dashes or case, since the plugin sends "94ee70..." where the SDK has "94ee7062-f188-...".
+ */
+internal fun visibleGameLibraries(
+    libraries: List<GameLibrary>,
+    userLibraryIds: Collection<String>,
+): List<GameLibrary> {
+    fun norm(id: String) = id.replace("-", "").lowercase()
+    val allowed = userLibraryIds.map(::norm).toSet()
+    return libraries.filter { norm(it.id) in allowed }
+}
