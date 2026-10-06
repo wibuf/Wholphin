@@ -278,6 +278,8 @@ class PlaybackViewModel
             if (this@PlaybackViewModel::player.isInitialized) {
                 player.removeListener(this@PlaybackViewModel)
                 (player as? ExoPlayer)?.removeAnalyticsListener(this@PlaybackViewModel)
+                player.removeListener(timeline)
+                (player as? ExoPlayer)?.removeAnalyticsListener(timeline)
 
                 this@PlaybackViewModel.activityListener?.let {
                     it.release()
@@ -334,9 +336,14 @@ class PlaybackViewModel
             }
         }
 
+        /** Fork: step-by-step log of starting playback, see [PlaybackTimeline] */
+        private val timeline = PlaybackTimeline()
+
         private fun configurePlayer() {
             player.addListener(this)
             (player as? ExoPlayer)?.addAnalyticsListener(this)
+            player.addListener(timeline)
+            (player as? ExoPlayer)?.addAnalyticsListener(timeline)
             jobs.add(subscribe())
             jobs.add(listenForTranscodeReason())
             val sessionPlayer =
@@ -508,6 +515,7 @@ class PlaybackViewModel
                     }
 
                 Timber.i("Playing ${item.id}")
+                timeline.start("'${item.name}' (${item.type}, ${item.id}) from ${positionMs}ms, transcodeOnly=$forceTranscoding")
 
                 // New item, so we can clear the media segment tracker & subtitle cues
                 resetSegmentState()
@@ -724,6 +732,10 @@ class PlaybackViewModel
                     enableDirectStream,
                     positionMs,
                 )
+                timeline.mark(
+                    "requesting playback info: audioIndex=$audioIndex subtitleIndex=$subtitleIndex " +
+                        "directPlay=$enableDirectPlay directStream=$enableDirectStream position=${positionMs}ms",
+                )
 
                 val maxBitrate =
                     preferences.appPreferences.playbackPreferences.maxBitrate
@@ -812,6 +824,14 @@ class PlaybackViewModel
                             else -> throw Exception("No supported playback method")
                         }
                     Timber.i("Playback decision for $itemId: $transcodeType")
+                    timeline.mark(
+                        "decision $transcodeType (directPlay=$enableDirectPlay, directStream=$enableDirectStream asked) " +
+                            "container=${source.container} bitrate=${source.bitrate} audioIndex=$audioIndex subtitleIndex=$subtitleIndex " +
+                            "position=${positionMs}ms reasons=${source.transcodingUrl?.substringAfter(
+                                "TranscodeReasons=",
+                                "",
+                            )?.substringBefore('&')}",
+                    )
 
                     val externalSubtitleCount = source.externalSubtitlesCount
 
@@ -906,6 +926,7 @@ class PlaybackViewModel
                                 currentPlayback = playback,
                             )
                         }
+                        timeline.mark("setMediaItem from ${positionMs}ms")
                         player.setMediaItem(
                             mediaItem,
                             positionMs,
@@ -915,6 +936,10 @@ class PlaybackViewModel
                                 // MpvPlayer may change tracks more than once to add external subtitles
                                 trackChangeListener?.let { player.addListener(it) }
                             } else {
+                                timeline.mark(
+                                    "RELOAD: the file's tracks didn't match audioIndex=$audioIndex subtitleIndex=$subtitleIndex, " +
+                                        "asking for a direct stream from ${positionMs}ms (player was at ${player.currentPosition}ms)",
+                                )
                                 viewModelScope.launchIO {
                                     changeStreams(
                                         item = item,
@@ -972,6 +997,7 @@ class PlaybackViewModel
         ): Boolean =
             withContext(WholphinDispatchers.IO) {
                 Timber.v("changeStreams direct play")
+                timeline.mark("switching tracks within the direct play, no reload")
 
                 // TODO Better way to handle unsupported types in general is needed
                 // This is a workaround for switching to a non AC3 track when the user wants audio transcoded to AC3
@@ -1285,7 +1311,12 @@ class PlaybackViewModel
                                             when (behavior) {
                                                 SkipSegmentBehavior.AUTO_SKIP -> {
                                                     if (autoSkippedSegments.add(currentSegment.id)) {
-                                                        onMain { player.seekTo(currentSegment.endTicks.ticks.inWholeMilliseconds + 1) }
+                                                        onMain {
+                                                            timeline.mark(
+                                                                "auto-skipping ${currentSegment.type} to ${currentSegment.endTicks.ticks.inWholeMilliseconds}ms",
+                                                            )
+                                                            player.seekTo(currentSegment.endTicks.ticks.inWholeMilliseconds + 1)
+                                                        }
                                                     }
                                                     MediaSegmentState(currentSegment, true)
                                                 }
@@ -1324,7 +1355,10 @@ class PlaybackViewModel
                         _state.update { it.copy(currentSegment = it.currentSegment?.copy(interacted = true)) }
                     } else {
                         _state.update { it.copy(currentSegment = null) }
-                        onMain { player.seekTo(segment.endTicks.ticks.inWholeMilliseconds + 1) }
+                        onMain {
+                            timeline.mark("skipping ${segment.type} to ${segment.endTicks.ticks.inWholeMilliseconds}ms")
+                            player.seekTo(segment.endTicks.ticks.inWholeMilliseconds + 1)
+                        }
                     }
                 }
             }
@@ -1498,6 +1532,7 @@ class PlaybackViewModel
 
                         PlayMethod.DIRECT_STREAM, PlayMethod.DIRECT_PLAY -> {
                             Timber.w("Playback error during ${it.playMethod}, falling back to transcoding")
+                            timeline.mark("RELOAD: error during ${it.playMethod} at ${player.currentPosition}ms, asking for a transcode")
                             val currentPlayback = state.value.currentPlayback
                             if (currentPlayback == null) {
                                 Timber.w("Playback error, currentPlayback is null")
@@ -1745,6 +1780,9 @@ class PlaybackViewModel
                                 }
 
                                 PlaystateCommand.SEEK -> {
+                                    timeline.mark(
+                                        "remote SEEK command from the server to ${it.seekPositionTicks?.ticks?.inWholeMilliseconds}ms",
+                                    )
                                     it.seekPositionTicks?.ticks?.let {
                                         player.seekTo(
                                             it.inWholeMilliseconds,
