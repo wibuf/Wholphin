@@ -1,0 +1,68 @@
+# Fork: one-off. Exports the app signing key (the one in the SIGNING_KEY secret, which signs every
+# fork build) for Google Play App Signing, encrypted with Play's public key, so Play-distributed
+# and sideloaded GooseFlix are signed alike. GitHub never returns a secret, so this is the way to
+# get the key to Play without the original keystore file.
+#
+# Play Console > App integrity > App signing > "Export and upload a key from Java keystore":
+# its "encryption public key" is committed at .github/play/encryption_public_key.pem (a public key,
+# safe to commit). Pushing it runs this; the run's artifact holds output.zip, encrypted so that
+# only Google can read it, to upload with "Upload generated ZIP". The raw key never leaves the runner.
+name: Play signing key export
+
+on:
+  push:
+    paths:
+      - .github/play/encryption_public_key.pem
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout the code
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Export and encrypt the signing key
+        env:
+          SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          KEY_STORE_PASSWORD: ${{ secrets.KEY_STORE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/pepk"
+          mkdir -p "$work"
+          echo "$SIGNING_KEY" | base64 -d > "$work/release.keystore"
+          curl -fsSL -o "$work/pepk.jar" https://www.gstatic.com/play-apps-publisher-rapid/signing-tool/prod/pepk.jar
+          java -jar "$work/pepk.jar" \
+            --keystore="$work/release.keystore" \
+            --alias="$KEY_ALIAS" \
+            --keystore-pass="$KEY_STORE_PASSWORD" \
+            --key-pass="$KEY_PASSWORD" \
+            --output="$work/output.zip" \
+            --include-cert \
+            --rsa-aes-encryption \
+            --encryption-key-path=.github/play/encryption_public_key.pem
+          # The certificate's fingerprint, to match against Play's "App signing key certificate"
+          # once it's uploaded (public information)
+          keytool -list -v -keystore "$work/release.keystore" -storepass "$KEY_STORE_PASSWORD" -alias "$KEY_ALIAS" \
+            | grep -E "SHA256:|SHA-256" || true
+          mkdir -p "$RUNNER_TEMP/out"
+          mv "$work/output.zip" "$RUNNER_TEMP/out/output.zip"
+          rm -rf "$work"
+
+      - name: Upload the encrypted key
+        uses: actions/upload-artifact@v4
+        with:
+          name: play-encrypted-signing-key
+          path: ${{ runner.temp }}/out/output.zip
+          retention-days: 2
