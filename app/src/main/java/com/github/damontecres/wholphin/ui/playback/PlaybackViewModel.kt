@@ -337,7 +337,15 @@ class PlaybackViewModel
         }
 
         /** Fork: step-by-step log of starting playback, see [PlaybackTimeline] */
-        private val timeline = PlaybackTimeline()
+        private val timeline =
+            PlaybackTimeline {
+                // The player may only be read on its own thread, and marks also come from background work
+                if (this::player.isInitialized && android.os.Looper.myLooper() == player.applicationLooper) {
+                    "pos=${player.currentPosition} buf=${player.bufferedPosition}"
+                } else {
+                    "-"
+                }
+            }
 
         private fun configurePlayer() {
             player.addListener(this)

@@ -27,8 +27,10 @@ import java.io.IOException
  * errors. Nothing here changes playback.
  */
 @UnstableApi
-class PlaybackTimeline :
-    Player.Listener,
+class PlaybackTimeline(
+    /** "pos=1234 buf=5678", read on each line so a silent jump back to 0 still shows */
+    private val position: () -> String = { "" },
+) : Player.Listener,
     AnalyticsListener {
     private var startedAt = SystemClock.elapsedRealtime()
 
@@ -42,7 +44,7 @@ class PlaybackTimeline :
     fun mark(what: String) = log(what)
 
     private fun log(message: String) {
-        Timber.tag(TAG).i("+%dms %s", SystemClock.elapsedRealtime() - startedAt, message)
+        Timber.tag(TAG).i("+%dms [%s] %s", SystemClock.elapsedRealtime() - startedAt, position(), message)
     }
 
     override fun onPlaybackStateChanged(playbackState: Int) = log("state ${stateName(playbackState)}")
@@ -93,6 +95,19 @@ class PlaybackTimeline :
 
     override fun onPlayerError(error: PlaybackException) = log("ERROR ${error.errorCodeName}: ${error.cause ?: error.message}")
 
+    override fun onLoadStarted(
+        eventTime: AnalyticsListener.EventTime,
+        loadEventInfo: LoadEventInfo,
+        mediaLoadData: MediaLoadData,
+        retryCount: Int,
+    ) = log("load start ${loadName(loadEventInfo, mediaLoadData)}${if (retryCount > 0) " retry $retryCount" else ""}")
+
+    override fun onLoadCompleted(
+        eventTime: AnalyticsListener.EventTime,
+        loadEventInfo: LoadEventInfo,
+        mediaLoadData: MediaLoadData,
+    ) = log("load done ${loadName(loadEventInfo, mediaLoadData)} ${loadEventInfo.bytesLoaded}B in ${loadEventInfo.loadDurationMs}ms")
+
     override fun onLoadError(
         eventTime: AnalyticsListener.EventTime,
         loadEventInfo: LoadEventInfo,
@@ -113,6 +128,23 @@ class PlaybackTimeline :
         bufferSizeMs: Long,
         elapsedSinceLastFeedMs: Long,
     ) = log("audio underrun")
+
+    /** Which file, what kind, and where in the video it covers: "12.ts media/video 33000-36000ms" */
+    private fun loadName(
+        info: LoadEventInfo,
+        data: MediaLoadData,
+    ): String {
+        val kind =
+            when (data.dataType) {
+                C.DATA_TYPE_MEDIA -> "media"
+                C.DATA_TYPE_MANIFEST -> "playlist"
+                C.DATA_TYPE_MEDIA_INITIALIZATION -> "init"
+                else -> "data${data.dataType}"
+            }
+        val span =
+            if (data.mediaStartTimeMs != C.TIME_UNSET) " ${data.mediaStartTimeMs}-${data.mediaEndTimeMs}ms" else ""
+        return "${info.uri.lastPathSegment ?: info.uri} $kind/${trackType(data.trackType)}$span"
+    }
 
     companion object {
         const val TAG = "GooseFlixPlay"
