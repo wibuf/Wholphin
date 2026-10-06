@@ -200,6 +200,8 @@ configure<ApplicationExtension> {
         }
         create("appstore") {
             dimension = "version"
+            // Fork: Play's automatic protection needs API 24+. Sideload and Fire TV keep 23.
+            minSdk = 24
             manifestPlaceholders += mapOf(featureLeanback to true)
             setFeatureFlag(featureUpdate, false)
             setFeatureFlag(featureDiscover, true)
