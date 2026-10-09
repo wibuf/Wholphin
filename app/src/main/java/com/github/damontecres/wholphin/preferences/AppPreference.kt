@@ -154,7 +154,7 @@ sealed interface AppPreference<Pref, T> {
         val HomePageItems =
             AppSliderPreference<AppPreferences>(
                 title = R.string.max_homepage_items,
-                defaultValue = 25,
+                defaultValue = if (BuildConfig.GOOSEFLIX) GooseFlixDefaults.MAX_ITEMS_PER_ROW.toLong() else 25,
                 min = 5,
                 max = 50,
                 interval = 1,
@@ -531,7 +531,7 @@ sealed interface AppPreference<Pref, T> {
         val ThemeColors =
             AppChoicePreference<AppPreferences, AppThemeColors>(
                 title = R.string.app_theme,
-                defaultValue = if (BuildConfig.GOOSEFLIX) AppThemeColors.BLUE else AppThemeColors.PURPLE,
+                defaultValue = if (BuildConfig.GOOSEFLIX) GooseFlixDefaults.themeColors else AppThemeColors.PURPLE,
                 getter = { it.interfacePreferences.appThemeColors },
                 setter = { prefs, value ->
                     prefs.updateInterfacePreferences { appThemeColors = value }
@@ -557,7 +557,10 @@ sealed interface AppPreference<Pref, T> {
             AppMultiChoicePreference<AppPreferences, DisplayToggle>(
                 title = R.string.display_toggles_title,
                 summary = R.string.display_toggles_summary,
-                defaultValue = DisplayToggle.entries.filterNot { it == DisplayToggle.UNRECOGNIZED },
+                defaultValue =
+                    GooseFlixDefaults.displayToggles(
+                        DisplayToggle.entries.filterNot { it == DisplayToggle.UNRECOGNIZED },
+                    ),
                 allValues = DisplayToggle.entries.filterNot { it == DisplayToggle.UNRECOGNIZED },
                 displayValues = R.array.display_toggle_types,
                 displayValuesSubtitles = R.array.display_toggle_types_subtitles,
@@ -885,7 +888,7 @@ sealed interface AppPreference<Pref, T> {
         val OneClickPause =
             AppSwitchPreference<AppPreferences>(
                 title = R.string.one_click_pause,
-                defaultValue = false,
+                defaultValue = BuildConfig.GOOSEFLIX && GooseFlixDefaults.ONE_CLICK_PAUSE,
                 getter = { it.playbackPreferences.oneClickPause },
                 setter = { prefs, value ->
                     prefs.updatePlaybackPreferences { oneClickPause = value }

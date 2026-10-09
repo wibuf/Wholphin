@@ -2,6 +2,7 @@ package com.github.damontecres.wholphin.services
 
 import android.content.Context
 import androidx.annotation.StringRes
+import com.github.damontecres.wholphin.BuildConfig
 import com.github.damontecres.wholphin.R
 import com.github.damontecres.wholphin.data.ServerRepository
 import com.github.damontecres.wholphin.data.model.BaseItem
@@ -292,10 +293,14 @@ class HomeSettingsService
 
             val includedIds =
                 libraries
-                    .mapIndexed { index, library ->
+                    .mapIndexedNotNull { index, library ->
                         val parentId = library.itemId
                         val title = getRecentlyAddedTitle(library.name)
-                        if (library.collectionType == CollectionType.LIVETV) {
+                        if (library.collectionType == CollectionType.LIVETV && BuildConfig.GOOSEFLIX) {
+                            // Fork-only: no Watch Live row by default; live TV has the guide and the
+                            // quick buttons at the top of the home page
+                            null
+                        } else if (library.collectionType == CollectionType.LIVETV) {
                             HomeRowConfigDisplay(
                                 id = index,
                                 title = ResStringProvider(R.string.watch_live),
@@ -315,18 +320,34 @@ class HomeSettingsService
                         }
                     }
             val continueWatchingRow =
-                listOf(
-                    HomeRowConfigDisplay(
-                        id = includedIds.size + 1,
-                        title = ResStringProvider(R.string.combine_continue_next),
-                        config = HomeRowConfig.ContinueWatchingCombined(),
-                    ),
-                )
+                if (BuildConfig.GOOSEFLIX) {
+                    // Fork-only: Continue Watching and Next Up as two rows rather than one combined
+                    listOf(
+                        HomeRowConfigDisplay(
+                            id = libraries.size + 1,
+                            title = ResStringProvider(R.string.continue_watching),
+                            config = HomeRowConfig.ContinueWatching(),
+                        ),
+                        HomeRowConfigDisplay(
+                            id = libraries.size + 2,
+                            title = ResStringProvider(R.string.next_up),
+                            config = HomeRowConfig.NextUp(),
+                        ),
+                    )
+                } else {
+                    listOf(
+                        HomeRowConfigDisplay(
+                            id = includedIds.size + 1,
+                            title = ResStringProvider(R.string.combine_continue_next),
+                            config = HomeRowConfig.ContinueWatchingCombined(),
+                        ),
+                    )
+                }
             // Fork-only: a row per Moonbase games library, after the Jellyfin ones
             val gameRows =
                 moonbaseGamesService.libraries().mapIndexed { index, library ->
                     HomeRowConfigDisplay(
-                        id = includedIds.size + 2 + index,
+                        id = libraries.size + 3 + index,
                         title = ResArgStringProvider(R.string.recently_added_in, library.name),
                         config = HomeRowConfig.Games(library.id, library.name),
                     )

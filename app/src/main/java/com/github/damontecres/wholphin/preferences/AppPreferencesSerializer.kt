@@ -36,6 +36,7 @@ class AppPreferencesSerializer
                                 seekBarSteps = AppPreference.SeekBarSteps.defaultValue.toInt()
                                 showDebugInfo = AppPreference.PlaybackDebugInfo.defaultValue
                                 autoPlayNext = AppPreference.AutoPlayNextUp.defaultValue
+                                oneClickPause = AppPreference.OneClickPause.defaultValue
                                 autoPlayNextDelaySeconds =
                                     AppPreference.AutoPlayNextDelay.defaultValue
                                 skipBackOnResumeSeconds =
