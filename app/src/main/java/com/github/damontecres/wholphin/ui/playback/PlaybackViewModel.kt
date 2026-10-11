@@ -278,6 +278,7 @@ class PlaybackViewModel
             if (this@PlaybackViewModel::player.isInitialized) {
                 player.removeListener(this@PlaybackViewModel)
                 (player as? ExoPlayer)?.removeAnalyticsListener(this@PlaybackViewModel)
+                player.removeListener(stalls)
                 player.removeListener(timeline)
                 (player as? ExoPlayer)?.removeAnalyticsListener(timeline)
 
@@ -347,9 +348,25 @@ class PlaybackViewModel
                 }
             }
 
+        /** Fork: stalls for the debug overlay, see [StallTracker] */
+        private val stalls = StallTracker()
+
+        /** Fork: what the debug overlay shows about stalls and buffering. Call on the main thread. */
+        fun debugStalls(): StallDebugInfo? {
+            if (!this::player.isInitialized) return null
+            val liveOffset =
+                if (player.isCurrentMediaItemLive) {
+                    player.currentLiveOffset.takeIf { it != androidx.media3.common.C.TIME_UNSET }
+                } else {
+                    null
+                }
+            return StallDebugInfo(stalls.snapshot(), player.totalBufferedDuration, liveOffset)
+        }
+
         private fun configurePlayer() {
             player.addListener(this)
             (player as? ExoPlayer)?.addAnalyticsListener(this)
+            player.addListener(stalls)
             player.addListener(timeline)
             (player as? ExoPlayer)?.addAnalyticsListener(timeline)
             jobs.add(subscribe())
@@ -524,6 +541,7 @@ class PlaybackViewModel
 
                 Timber.i("Playing ${item.id}")
                 timeline.start("'${item.name}' (${item.type}, ${item.id}) from ${positionMs}ms, transcodeOnly=$forceTranscoding")
+                withContext(WholphinDispatchers.Main) { stalls.newItem(item.id) }
 
                 // New item, so we can clear the media segment tracker & subtitle cues
                 resetSegmentState()
@@ -1615,10 +1633,12 @@ class PlaybackViewModel
                 LiveTvRecovery.FallBackToTranscode -> {
                     Timber.w("Live TV failed to start with %s, falling back to transcoding", playMethod)
                     LiveTvTranscodeMemory.markNeedsTranscode(channelId)
+                    stalls.onReconnect()
                     restartLiveTvStream(Duration.ZERO, toast = null)
                 }
 
                 is LiveTvRecovery.Reconnect -> {
+                    stalls.onReconnect()
                     Timber.i(
                         "Live TV stream failed, restarting in %s (attempt %d of %d)",
                         recovery.delay,

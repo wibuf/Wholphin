@@ -30,6 +30,7 @@ import com.github.damontecres.wholphin.ui.PreviewTvSpec
 import com.github.damontecres.wholphin.ui.formatBitrate
 import com.github.damontecres.wholphin.ui.formatBytes
 import com.github.damontecres.wholphin.ui.letNotEmpty
+import com.github.damontecres.wholphin.ui.playback.StallDebugInfo
 import com.github.damontecres.wholphin.ui.playback.AnalyticsState
 import com.github.damontecres.wholphin.ui.playback.CurrentPlayback
 import com.github.damontecres.wholphin.ui.theme.WholphinTheme
@@ -60,7 +61,15 @@ fun PlaybackDebugOverlay(
     analyticsState: AnalyticsState,
     currentPlayback: CurrentPlayback?,
     modifier: Modifier = Modifier,
+    debugStalls: (() -> StallDebugInfo?)? = null,
 ) {
+    // Fork: stall counts and buffer levels, refreshed each second
+    val stallInfo by produceState<StallDebugInfo?>(null, debugStalls) {
+        while (isActive) {
+            value = debugStalls?.invoke()
+            delay(1.seconds)
+        }
+    }
     val context = LocalContext.current
     val display =
         remember(context) {
@@ -139,6 +148,13 @@ fun PlaybackDebugOverlay(
                     keyWidth = 80.dp,
                     modifier = Modifier.weight(1f, fill = false),
                 )
+                stallInfo?.let { info ->
+                    SimpleTable(
+                        rows = stallRows(info),
+                        keyWidth = 80.dp,
+                        modifier = Modifier.weight(1f, fill = false),
+                    )
+                }
                 currentPlayback?.transcodeInfo?.let { info ->
                     SimpleTable(
                         listOf(
@@ -295,4 +311,22 @@ fun PlaybackDebugOverlayPreview() {
             modifier = Modifier.fillMaxSize(),
         )
     }
+}
+
+/** Fork: the stall table, eg "Stalls: 4 (12.3s)", "Last stall: 2.1s, 40s ago" */
+internal fun stallRows(info: StallDebugInfo): List<Pair<String, Any?>> {
+    fun secs(ms: Long) = String.format(Locale.US, "%.1fs", ms / 1000.0)
+    val s = info.stalls
+    return listOf(
+        "Stalls:" to "${s.count} (${secs(s.totalMs)})",
+        "Last stall:" to
+            when {
+                s.currentMs != null -> "now, ${secs(s.currentMs)}"
+                s.sinceLastMs != null -> "${secs(s.lastMs)}, ${s.sinceLastMs / 1000}s ago"
+                else -> "none"
+            },
+        "Buffer ahead:" to secs(info.bufferAheadMs),
+        "Behind live:" to (info.liveOffsetMs?.let { secs(it) } ?: "-"),
+        "Reconnects:" to s.reconnects,
+    )
 }

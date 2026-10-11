@@ -55,6 +55,7 @@ import com.github.damontecres.wholphin.ui.AppColors
 import com.github.damontecres.wholphin.ui.LocalImageUrlService
 import com.github.damontecres.wholphin.ui.components.TimeDisplay
 import com.github.damontecres.wholphin.ui.isNotNullOrBlank
+import com.github.damontecres.wholphin.ui.playback.StallDebugInfo
 import com.github.damontecres.wholphin.ui.playback.AnalyticsState
 import com.github.damontecres.wholphin.ui.playback.ControllerViewState
 import com.github.damontecres.wholphin.ui.playback.CurrentPlayback
@@ -87,6 +88,7 @@ fun PlaybackOverlay(
     showDebugInfo: Boolean,
     currentPlayback: CurrentPlayback?,
     currentSegment: MediaSegmentDto?,
+    debugStalls: (() -> StallDebugInfo?)? = null,
     analyticsState: AnalyticsState,
     queue: List<PlaylistItem>,
     modifier: Modifier = Modifier,
@@ -345,6 +347,7 @@ fun PlaybackOverlay(
             PlaybackDebugOverlay(
                 analyticsState = analyticsState,
                 currentPlayback = currentPlayback,
+                debugStalls = debugStalls,
                 modifier =
                     Modifier
                         .align(Alignment.TopStart)

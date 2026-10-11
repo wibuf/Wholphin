@@ -493,6 +493,7 @@ fun PlaybackPageContent(
                 onSeekBarChange = seekBarState::onValueChange,
                 showDebugInfo = showDebugInfo,
                 currentPlayback = state.currentPlayback,
+                debugStalls = viewModel::debugStalls,
                 chapters = state.currentMediaInfo.chapters,
                 trickplayInfo = state.currentMediaInfo.trickPlayInfo,
                 trickplayUrlFor = viewModel::getTrickplayUrl,
