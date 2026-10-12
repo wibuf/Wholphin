@@ -67,7 +67,7 @@ Newest first within each area. The numbers are GooseFlix issues unless they say 
 - Rows for libraries added after the user saved their home settings, placed in library order (`services/NewHomeRows.kt`).
 - Recently Added shows a single new episode as its show (card, header and click), with a "New episode · S1 E2 · Name" line in the header. Setting: Interface → "Show the series for new episodes", on by default (#1501; `services/NewEpisodeSeries.kt`).
 - Defaults: Continue Watching and Next Up as separate rows, no Watch Live row, 50 items per row.
-- Up/down between home rows are moved by the page itself, not left to Android's focus search: it picks the next row with something in it, scrolls it into place if needed and focuses it, dropping held repeats until each move lands. Holding a direction can't lose focus, and a lost focus comes back on the next press (`ui/main/HomeRowNav.kt`; upstream damontecres/Wholphin#2034).
+- Holding up or down on the home page moves one row every 150 ms, so focus can't outrun the list and get lost (`ui/main/HoldThrottle.kt`; upstream damontecres/Wholphin#2034). Faster versions (moving as soon as focus landed, and moving rows by hand) got stuck on the Shield and were rolled back.
 - The previous user's rows are cleared when switching user.
 
 ### Video games
