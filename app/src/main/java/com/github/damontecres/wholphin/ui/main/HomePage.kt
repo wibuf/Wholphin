@@ -37,6 +37,7 @@ import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
@@ -394,10 +395,13 @@ fun HomePageContent(
         // Also on leaving the pills, whose backdrop would otherwise stay up behind the row item
         if (focusedPill == null) focusedItem?.let { onUpdateBackdrop.invoke(it) }
     }
+    // Fork: a held up/down moves one row at a time at a steady pace, see HoldThrottle
+    val holdThrottle = remember { HoldThrottle() }
     Box(modifier = modifier) {
         Column(
             modifier =
                 Modifier
+                    .onPreviewKeyEvent { holdThrottle.consumes(it) }
                     .focusProperties {
                         onEnter = {
                             rowFocusRequesters.getOrNull(currentPosition.row)?.tryRequestFocus()
