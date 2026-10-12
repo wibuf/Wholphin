@@ -1,0 +1,97 @@
+# GooseFlix: what this fork changes
+
+GooseFlix is a fork of [Wholphin](https://github.com/damontecres/Wholphin), the Android TV
+client for Jellyfin, built for one Jellyfin server (jelly.grit.bot). This file is the record of
+what the fork adds or changes and why. Keep it current: add a line whenever a fork feature lands.
+
+Tracking for everything else lives in the **GooseFlix** repo's issues
+([wibuf/GooseFlix](https://github.com/wibuf/GooseFlix/issues)), filed through GitPilot.
+App issues there are titled "App: ...".
+
+## Where the work lives
+
+- **Branch `claude/tender-johnson-wqvwci` is the fork's source of truth.** The fork's `main` is
+  still upstream's code at the point the fork branched (`45c1ceca`). Start new work from this
+  branch, not from `main`.
+- **Every push to a `claude/**` branch** is built by `.github/workflows/fork-build.yml` into a
+  signed release and published as a rolling prerelease named after the branch
+  (`claude-tender-johnson-wqvwci`). Its title carries the version, eg `v1.0.7-113-g9a7fa768`.
+- **Sideloaded TVs** update from Scuffed: Scuffed reads that prerelease (its `fork_tag` setting),
+  installs it on the Shield over ADB, and serves `/update` and `/get` for the app's self-updater
+  and the Downloader install at add.beefmc.com/tv. **A different branch publishes a different
+  tag**, so moving work to a new branch also means pointing Scuffed's `fork_tag` at it.
+- **Google Play** (`bot.grit.gooseflix`): the same release carries `app-appstore-release.aab`.
+  Upload it by hand in Play Console (Closed testing → Alpha → Create new release).
+
+## Build
+
+```
+./gradlew -PforkBuild :app:assembleDefaultRelease        # sideload build
+./gradlew -PforkBuild :app:bundleAppstoreRelease         # Play bundle (run scripts/fetch-libretro-cores.sh first)
+./gradlew -PforkBuild :app:testDefaultDebugUnitTest --tests '*SomeTest'
+```
+
+`-PforkBuild` turns on `BuildConfig.GOOSEFLIX`. Without it the code builds as plain Wholphin.
+
+Flavours:
+- `default`: sideload, app id `...wholphin.fork`, self-updating from Scuffed, game cores downloaded on demand.
+- `appstore`: Play, app id `bot.grit.gooseflix`, leanback, minSdk 24 (Play's automatic protection), no self-update, game cores bundled from `app/src/appstore/libretro-cores.txt`.
+- `firetv`: as upstream.
+
+The version code is tags × 10000 + commits since the tag, so every push is a higher version.
+
+## Conventions
+
+- **Fork code goes in its own files** where it can, marked `Fork-only` in a comment. Changes
+  inside upstream files are small and gated on `BuildConfig.GOOSEFLIX`. That keeps merges from
+  upstream manageable.
+- **Proto fields the fork adds are numbered 500+** (`WholphinDataStore.proto`), and enum entries
+  are added at the end. A number upstream later claims would silently turn one setting into
+  another.
+- **Defaults for a fresh install** are in `preferences/GooseFlixDefaults.kt`. They don't change
+  what an existing install already has.
+
+## What the fork adds
+
+Newest first within each area. The numbers are GooseFlix issues unless they say otherwise.
+
+### Identity and setup
+- Rebranded as GooseFlix: name, launcher icons, TV banner, sign-in logo. Art is in `app/src/fork/art`.
+- Built-in server: no server address to type. The sign-in screen has a username/password form and a QR code for signing in from a phone (`ui/setup/home/`).
+- Self-updater from Scuffed's feed: silent install on Android 12+, one press below that (`services/update/`).
+- Google Play build: `bot.grit.gooseflix`, game cores bundled, minSdk 24, signing key exported to Play App Signing (`.github/workflows/play-signing-key.yml`, one-off).
+
+### Home page
+- Quick pills: a row of shortcut buttons at the top (Guide, favourite channels) per user, set in Scuffed's admin page (`services/QuickPillsService.kt`, `ui/main/QuickPills.kt`).
+- Live game pills for the Patriots, Celtics, Bruins and Red Sox, first in the pill row while a game or its pregame is on. They come from Scuffed's `/api/gooseflix/live` (#1427, #1422).
+- Rows for libraries added after the user saved their home settings, placed in library order (`services/NewHomeRows.kt`).
+- Defaults: Continue Watching and Next Up as separate rows, no Watch Live row, 50 items per row.
+- Holding up or down moves at a steady pace, so focus can't get lost on a long home page (`ui/main/HoldThrottle.kt`; upstream damontecres/Wholphin#2034).
+- The previous user's rows are cleared when switching user.
+
+### Video games
+- Native retro game playback from the Moonbase Jellyfin plugin: libretro host in `app/src/main/cpp`, games UI in `games/`.
+- Controllers mapped per port; artwork fetched through a retrying disk cache; a home row and header for each games library.
+- Game libraries only show for users who can see that library in Jellyfin. The plugin itself doesn't check permissions.
+
+### Ratings and details
+- IMDb, Rotten Tomatoes (critics and Popcornmeter) and TMDB ratings from the MDBList Ratings plugin, with provider logos (#1862; `services/MdbListRatingsService.kt`, `ui/components/MdbListRatingsRow.kt`).
+- The server's own critic and community scores are hidden by default.
+
+### Search
+- Titles that exist in more than one library show the library name in place of the year (`ui/search/SearchLibraries.kt`).
+
+### Playback and live TV
+- Live TV recovery: a stream that errors or hangs reconnects on its own, and a channel that won't start falls back to the server transcoding it (`LiveTvRetryPolicy.kt`, `LiveTvTranscodeMemory.kt`).
+- Passout protection for live TV: "Still watching?" after a set time with no button pressed, then stop. Steps are 30 minutes, and it can be set for live TV, shows/movies or both (`LiveTvPassout.kt`).
+- Guide: any programme's channel can be watched, whatever time the programme is.
+- Debug overlay: stall counter, buffer ahead, distance behind live, reconnects (`StallTracker.kt`).
+- Playback timeline log (logcat tag `GooseFlixPlay`) for diagnosing start-up problems (`PlaybackTimeline.kt`).
+- Subtitle keyword priorities: prefer "full"/"dialogue" tracks and avoid signs/songs/forced ones, tuned on the anime library.
+- MPV: dialogue boost and loud-scene compression options.
+- Defaults: OLED black theme, pause with one press of the centre button.
+
+## Upstream
+
+- Forked from upstream at `45c1ceca`. Upstream has moved on since (`f01c5d36`, 2026-10-11) and hasn't been merged in yet.
+- Issues we've filed upstream: damontecres/Wholphin#2034 (home page focus stuck), fixed here.
