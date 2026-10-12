@@ -72,6 +72,7 @@ import eu.wewox.programguide.ProgramGuide
 import eu.wewox.programguide.ProgramGuideDimensions
 import eu.wewox.programguide.ProgramGuideItem
 import eu.wewox.programguide.rememberSaveableProgramGuideState
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import timber.log.Timber
@@ -337,27 +338,47 @@ fun TvGuideGridContent(
     var anchorHours by remember(guideStart) { mutableFloatStateOf(nowHours) }
     var movedSideways by remember { mutableStateOf(false) }
     val slotStarts = remember(guideTimes) { guideTimes.map { hoursBetween(guideStart, it) } }
+    val slots =
+        remember(programs) {
+            programs.programs.map { GuideFocus.Slot(it.channelId, it.startHours, it.endHours) }
+        }
+    val channelRows = remember(channels) { channels.withIndex().associate { (i, c) -> c.id to i } }
+    var verticalMoveInFlight by remember { mutableStateOf(false) }
 
-    /** Up/down from a programme: straight to what's on at the anchor time in the next channel */
-    fun moveVertically(step: Int): Boolean {
+    /**
+     * Up/down from a programme: straight to what's on at the anchor time in the next channel. A
+     * held button jumps there without animating, or each repeat would restart the scroll and the
+     * guide would crawl behind; a single press scrolls smoothly.
+     */
+    fun moveVertically(
+        step: Int,
+        held: Boolean,
+    ): Boolean {
         val current = programs.programs.getOrNull(focusedProgramIndex) ?: return false
-        val row = channels.indexOfFirst { it.id == current.channelId }
+        val row = channelRows[current.channelId] ?: return false
         val target = channels.getOrNull(row + step) ?: return false
-        val index = GuideFocus.programAt(programs.programs, target.id, anchorHours) ?: return false
+        val index = GuideFocus.slotAt(slots, target.id, anchorHours) ?: return false
         movedSideways = false
         focusedProgramIndex = index
+        verticalMoveInFlight = true
         scope.launch {
             try {
-                state.animateToChannel(row + step, Alignment.CenterVertically)
+                if (held) {
+                    state.snapToChannel(row + step, Alignment.CenterVertically)
+                } else {
+                    launch { state.animateToChannel(row + step, Alignment.CenterVertically) }
+                }
+                // The programme may only be laid out once the guide has moved to it
+                repeat(GUIDE_FOCUS_ATTEMPTS) {
+                    if (programFocusRequester.tryRequestFocus()) return@launch
+                    withFrameNanos { }
+                }
+            } catch (ex: CancellationException) {
+                throw ex
             } catch (ex: Exception) {
-                Timber.e(ex, "Couldn't scroll to channel ${row + step}")
-            }
-        }
-        scope.launch {
-            // The programme may only be laid out once the guide has started scrolling to it
-            repeat(GUIDE_FOCUS_ATTEMPTS) {
-                if (programFocusRequester.tryRequestFocus()) return@launch
-                withFrameNanos { }
+                Timber.e(ex, "Couldn't move to channel ${row + step}")
+            } finally {
+                verticalMoveInFlight = false
             }
         }
         return true
@@ -421,8 +442,16 @@ fun TvGuideGridContent(
 
                             Key.DirectionUp, Key.DirectionDown -> {
                                 movedSideways = false
-                                focusedChannelIndex < 0 &&
-                                    moveVertically(if (event.key == Key.DirectionDown) 1 else -1)
+                                when {
+                                    focusedChannelIndex >= 0 -> false
+                                    // A held button's repeats wait for the last move to land
+                                    verticalMoveInFlight -> true
+                                    else ->
+                                        moveVertically(
+                                            step = if (event.key == Key.DirectionDown) 1 else -1,
+                                            held = event.nativeKeyEvent.repeatCount > 0,
+                                        )
+                                }
                             }
 
                             else -> {
