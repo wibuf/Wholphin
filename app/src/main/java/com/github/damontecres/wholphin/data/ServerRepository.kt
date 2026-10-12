@@ -6,6 +6,7 @@ import androidx.core.content.edit
 import androidx.datastore.core.DataStore
 import com.github.damontecres.wholphin.data.model.JellyfinServer
 import com.github.damontecres.wholphin.data.model.JellyfinUser
+import com.github.damontecres.wholphin.data.model.ServerUserConfig
 import com.github.damontecres.wholphin.preferences.AppPreferences
 import com.github.damontecres.wholphin.services.hilt.IoDispatcher
 import com.github.damontecres.wholphin.ui.toServerString
@@ -16,6 +17,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
@@ -53,9 +55,9 @@ class ServerRepository
         private var _current = MutableStateFlow<CurrentUser?>(null)
         val current: StateFlow<CurrentUser?> = _current
 
-        private var _currentUserDto = MutableStateFlow<UserDto?>(null)
-        val currentUserDto: UserDto? get() = _currentUserDto.value
-        val currentUserDtoFlow: StateFlow<UserDto?> get() = _currentUserDto
+        private var _currentUserDto = MutableStateFlow<ServerUserConfig?>(null)
+        val currentUserDto: ServerUserConfig? get() = _currentUserDto.value
+        val currentUserDtoFlow: StateFlow<ServerUserConfig?> get() = _currentUserDto
 
         val currentServer: JellyfinServer? get() = _current.value?.server
         val currentServerFlow: Flow<JellyfinServer?> get() = _current.map { it?.server }
@@ -67,7 +69,9 @@ class ServerRepository
                 _current
                     .flatMapLatest { user ->
                         if (user?.user != null) {
-                            serverDao.getUserFlow(user.user.serverId, user.user.id)
+                            serverDao
+                                .getUserFlow(user.user.serverId, user.user.id)
+                                .distinctUntilChanged()
                         } else {
                             flow { emit(null) }
                         }
@@ -126,7 +130,7 @@ class ServerRepository
                 val currentUser = CurrentUser(updatedServer, updatedUser)
                 withContext(WholphinDispatchers.Main) {
                     _current.value = currentUser
-                    _currentUserDto.value = userDto
+                    _currentUserDto.value = ServerUserConfig(userDto)
                 }
                 getServerSharedPreferences(context).edit(true) {
                     putString(SERVER_URL_KEY, updatedServer.url)
@@ -318,8 +322,17 @@ class ServerRepository
          */
         suspend fun updateUserDto() {
             val userDto by apiClient.userApi.getCurrentUser()
+            updateUserDto(userDto)
+        }
+
+        /**
+         * Update [currentUserDto] with the specified [UserDto]
+         *
+         * This will only update if the [UserDto] is for the [currentUser]
+         */
+        fun updateUserDto(userDto: UserDto) {
             _currentUserDto.update {
-                if (it?.id == userDto.id && currentUser?.id == userDto.id) userDto else it
+                if (currentUser?.id == userDto.id) ServerUserConfig(userDto) else it
             }
         }
 

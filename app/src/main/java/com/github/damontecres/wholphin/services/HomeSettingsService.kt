@@ -10,6 +10,7 @@ import com.github.damontecres.wholphin.data.model.HomePageSettings
 import com.github.damontecres.wholphin.data.model.HomeRowConfig
 import com.github.damontecres.wholphin.data.model.HomeRowViewOptions
 import com.github.damontecres.wholphin.data.model.SUPPORTED_HOME_PAGE_SETTINGS_VERSION
+import com.github.damontecres.wholphin.data.model.ServerUserConfig
 import com.github.damontecres.wholphin.data.model.createGenreDestination
 import com.github.damontecres.wholphin.data.model.createStudioDestination
 import com.github.damontecres.wholphin.games.GameArtworkService
@@ -259,7 +260,7 @@ class HomeSettingsService
                         rows.mapIndexed { index, config ->
                             resolve(index, config)
                         }
-                    HomePageResolvedSettings(resolvedRows)
+                    HomePageResolvedSettings(userId, resolvedRows)
                 } else {
                     createDefault(userId)
                 }
@@ -270,12 +271,15 @@ class HomeSettingsService
         /**
          * Resolve the settings and set them to be the current settings
          */
-        suspend fun updateCurrent(settings: HomePageSettings) {
+        suspend fun updateCurrent(
+            userId: UUID,
+            settings: HomePageSettings,
+        ) {
             val resolvedRows =
                 settings.rows.mapIndexed { index, config ->
                     resolve(index, config)
                 }
-            val resolvedSettings = HomePageResolvedSettings(resolvedRows)
+            val resolvedSettings = HomePageResolvedSettings(userId, resolvedRows)
             currentSettings.update { resolvedSettings }
         }
 
@@ -355,7 +359,7 @@ class HomeSettingsService
                     )
                 }
             val rowConfig = continueWatchingRow + includedIds + gameRows
-            return HomePageResolvedSettings(rowConfig)
+            return HomePageResolvedSettings(userId, rowConfig)
         }
 
         /**
@@ -518,7 +522,7 @@ class HomeSettingsService
                                 null
                             }
                         }.flatten()
-                HomePageResolvedSettings(rowConfigs)
+                HomePageResolvedSettings(userId, rowConfigs)
             } else {
                 null
             }
@@ -710,7 +714,7 @@ class HomeSettingsService
             row: HomeRowConfig,
             scope: CoroutineScope,
             prefs: HomePagePreferences,
-            userDto: UserDto,
+            userDto: ServerUserConfig,
             libraries: List<Library>,
             limit: Int = prefs.maxItemsPerRow,
             isRefresh: Boolean,
@@ -1359,10 +1363,11 @@ data class HomeRowConfigDisplay(
  * @see HomePageSettings
  */
 data class HomePageResolvedSettings(
+    val userId: UUID,
     val rows: List<HomeRowConfigDisplay>,
 ) {
     companion object {
-        val EMPTY = HomePageResolvedSettings(listOf())
+        val EMPTY = HomePageResolvedSettings(UUID.randomUUID(), emptyList())
     }
 }
 

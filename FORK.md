@@ -96,5 +96,6 @@ Newest first within each area. The numbers are GooseFlix issues unless they say 
 
 ## Upstream
 
-- Forked from upstream at `45c1ceca`. Upstream has moved on since (`f01c5d36`, 2026-10-11) and hasn't been merged in yet.
+- Synced with upstream **v1.0.9** on 2026-10-12, a merge on the sync branch. The fork first grew from `45c1ceca`, just after v1.0.7. To sync again: fetch upstream's tags, merge the release tag into a `claude/...` branch, resolve conflicts (keep fork behaviour, take upstream's structure), run the tests, and install that branch's build on a Shield before merging it into the working branch.
+- Version codes count fork commits since `v1.0.7` (`FORK_BASE_TAG` in `app/build.gradle.kts`), not since the latest tag. Merging a new upstream tag resets the latter, and Android refuses to install a lower code.
 - Issues we've filed upstream: damontecres/Wholphin#2034 (home page focus stuck), fixed here.

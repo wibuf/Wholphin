@@ -54,6 +54,20 @@ val gitDescribe =
         .standardOutput.asText
         .getOrElse("v0.0.0")
 
+/** Fork: the upstream release the fork's version codes count from, see forkCommitsSinceBase */
+val FORK_BASE_TAG = "v1.0.7"
+
+// Fork: commits since the release the fork grew from. Unlike the count since the latest tag, this
+// only ever goes up, so merging a newer upstream release (whose tag resets that count) can't number
+// a build below the one already installed. Empty if that tag isn't fetched (eg a shallow clone).
+val forkCommitsSinceBase =
+    providers
+        .exec {
+            commandLine("git", "rev-list", "--count", "$FORK_BASE_TAG..HEAD")
+            isIgnoreExitValue = true
+        }.standardOutput.asText
+        .getOrElse("")
+
 kotlin {
     compilerOptions {
         languageVersion = org.jetbrains.kotlin.gradle.dsl.KotlinVersion.KOTLIN_2_3
@@ -85,7 +99,10 @@ configure<ApplicationExtension> {
                 ?.groupValues
                 ?.get(1)
                 ?.toInt() ?: 0
-        versionCode = if (project.hasProperty("forkBuild")) tagCount * 10000 + sinceTag else tagCount
+        // Fork builds count from FORK_BASE_TAG instead (see forkCommitsSinceBase): v1.0.7-120 was
+        // 590120, and after merging upstream v1.0.9 the count since the tag would drop to ~53
+        val forkSince = forkCommitsSinceBase.trim().toIntOrNull() ?: sinceTag
+        versionCode = if (project.hasProperty("forkBuild")) tagCount * 10000 + forkSince else tagCount
         versionName = gitDescribe.trim().removePrefix("v").ifBlank { "0.0.0" }
         testInstrumentationRunner = "com.github.damontecres.wholphin.test.WholphinTestRunner"
 
@@ -386,6 +403,7 @@ dependencies {
     implementation(libs.androidx.tvprovider)
     implementation(libs.androidx.work.runtime.ktx)
     implementation(libs.androidx.hilt.work)
+    implementation(libs.androidx.profileinstaller)
 
     implementation(libs.androidx.media3.exoplayer)
     implementation(libs.androidx.media3.session)

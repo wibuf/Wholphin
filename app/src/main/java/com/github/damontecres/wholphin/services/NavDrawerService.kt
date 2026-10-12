@@ -5,6 +5,7 @@ import com.github.damontecres.wholphin.data.ServerPreferencesDao
 import com.github.damontecres.wholphin.data.ServerRepository
 import com.github.damontecres.wholphin.data.model.JellyfinUser
 import com.github.damontecres.wholphin.data.model.NavPinType
+import com.github.damontecres.wholphin.data.model.ServerUserConfig
 import com.github.damontecres.wholphin.games.MoonbaseGamesService
 import com.github.damontecres.wholphin.services.hilt.DefaultCoroutineScope
 import com.github.damontecres.wholphin.ui.collectLatestIn
@@ -196,7 +197,7 @@ class NavDrawerService
          */
         suspend fun updateNavDrawer(
             user: JellyfinUser,
-            userDto: UserDto,
+            userDto: ServerUserConfig,
             discoverActive: Boolean,
         ) {
             val builtins =

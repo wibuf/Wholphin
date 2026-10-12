@@ -440,6 +440,19 @@ sealed interface AppPreference<Pref, T> {
                 },
             )
 
+        val MaxResolutionPref =
+            AppChoicePreference<AppPreferences, MaxResolution>(
+                title = R.string.max_resolution,
+                defaultValue = MaxResolution.NO_LIMIT,
+                getter = { MaxResolution.fromValue(it.playbackPreferences.overrides.maxResolution) },
+                setter = { prefs, value ->
+                    prefs.updatePlaybackOverrides { maxResolution = value.value }
+                },
+                displayValues = R.array.max_resolution_options,
+                indexToValue = { MaxResolution.entries.getOrNull(it) ?: MaxResolution.NO_LIMIT },
+                valueToIndex = { it.ordinal },
+            )
+
         val Ac3Supported =
             AppSwitchPreference<AppPreferences>(
                 title = R.string.ac3_supported,
@@ -1346,6 +1359,7 @@ val advancedPreferences =
                         AppPreference.DpadSeekModePref,
                         AppPreference.SubtitlePreferredKeywords,
                         AppPreference.SubtitleAvoidedKeywords,
+                        AppPreference.MaxResolutionPref,
                         AppPreference.MaxBitrate,
                         AppPreference.RefreshRateSwitching,
                         AppPreference.ResolutionSwitching,

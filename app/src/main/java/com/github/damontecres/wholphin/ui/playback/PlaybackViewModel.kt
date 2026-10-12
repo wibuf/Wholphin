@@ -19,6 +19,7 @@ import androidx.media3.common.Player
 import androidx.media3.common.Tracks
 import androidx.media3.common.text.CueGroup
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.common.util.Util
 import androidx.media3.exoplayer.DecoderCounters
 import androidx.media3.exoplayer.DecoderReuseEvaluation
 import androidx.media3.exoplayer.ExoPlayer
@@ -85,6 +86,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -119,6 +121,7 @@ import org.jellyfin.sdk.model.api.PlaybackInfoDto
 import org.jellyfin.sdk.model.api.PlaybackStopInfo
 import org.jellyfin.sdk.model.api.PlaystateCommand
 import org.jellyfin.sdk.model.api.PlaystateMessage
+import org.jellyfin.sdk.model.api.PlaystateRequest
 import org.jellyfin.sdk.model.api.TrickplayInfo
 import org.jellyfin.sdk.model.api.VideoRange
 import org.jellyfin.sdk.model.api.VideoRangeType
@@ -193,6 +196,7 @@ class PlaybackViewModel
         private var activityListener: TrackActivityPlaybackListener? = null
         private var trackChangeListener: TracksChangedListener? = null
         private val jobs = mutableListOf<Job>()
+        private var subscribeJob: Job? = null
 
         private val liveTvRetryPolicy = LiveTvRetryPolicy()
         private var liveTvRetryJob: Job? = null
@@ -369,7 +373,7 @@ class PlaybackViewModel
             player.addListener(stalls)
             player.addListener(timeline)
             (player as? ExoPlayer)?.addAnalyticsListener(timeline)
-            jobs.add(subscribe())
+            subscribeToWebSocket()
             jobs.add(listenForTranscodeReason())
             val sessionPlayer =
                 MediaSessionPlayer(
@@ -1779,66 +1783,86 @@ class PlaybackViewModel
             activityListener = null
         }
 
-        fun subscribe(): Job =
-            api.webSocket
-                .subscribe<PlaystateMessage>()
-                .onEach { message ->
-                    message.data?.let {
-                        withContext(WholphinDispatchers.Main) {
-                            when (it.command) {
-                                PlaystateCommand.STOP -> {
-                                    release()
-                                    navigationManager.goBack()
-                                }
-
-                                PlaystateCommand.PAUSE -> {
-                                    player.pause()
-                                }
-
-                                PlaystateCommand.UNPAUSE -> {
-                                    player.play()
-                                }
-
-                                PlaystateCommand.NEXT_TRACK -> {
-                                    playNextUp()
-                                }
-
-                                PlaystateCommand.PREVIOUS_TRACK -> {
-                                    playPrevious()
-                                }
-
-                                PlaystateCommand.SEEK -> {
-                                    timeline.mark(
-                                        "remote SEEK command from the server to ${it.seekPositionTicks?.ticks?.inWholeMilliseconds}ms",
-                                    )
-                                    it.seekPositionTicks?.ticks?.let {
-                                        player.seekTo(
-                                            it.inWholeMilliseconds,
-                                        )
+        fun subscribeToWebSocket() {
+            subscribeJob?.cancel()
+            try {
+                subscribeJob =
+                    viewModelScope.launch {
+                        coroutineScope {
+                            api.webSocket
+                                .subscribe<PlaystateMessage>()
+                                .onEach { message ->
+                                    message.data?.let { request ->
+                                        Timber.v("Received playstate request: %s", request)
+                                        withContext(WholphinDispatchers.Main) {
+                                            handlePlaystateRequest(request)
+                                        }
                                     }
-                                }
-
-                                PlaystateCommand.REWIND -> {
-                                    player.seekBack(
-                                        preferences.appPreferences.playbackPreferences.skipBackMs.milliseconds,
-                                    )
-                                }
-
-                                PlaystateCommand.FAST_FORWARD -> {
-                                    player.seekForward(
-                                        preferences.appPreferences.playbackPreferences.skipForwardMs.milliseconds,
-                                    )
-                                }
-
-                                PlaystateCommand.PLAY_PAUSE -> {
-                                    if (player.isPlaying) player.pause() else player.play()
-                                }
-                            }
+                                }.catch { ex ->
+                                    Timber.e(ex, "Error in websocket subscription")
+                                }.launchIn(this)
                         }
                     }
-                }.catch { ex ->
-                    Timber.e(ex, "Error in websocket subscription")
-                }.launchIn(viewModelScope)
+            } catch (ex: CancellationException) {
+                throw ex
+            } catch (ex: Exception) {
+                Timber.e(ex, "Error in playback websocket subscription")
+                if (viewModelScope.isActive) {
+                    subscribeToWebSocket()
+                }
+            }
+        }
+
+        private suspend fun handlePlaystateRequest(request: PlaystateRequest) =
+            withContext(WholphinDispatchers.Main) {
+                when (request.command) {
+                    PlaystateCommand.STOP -> {
+                        release()
+                        navigationManager.goBack()
+                    }
+
+                    PlaystateCommand.PAUSE -> {
+                        player.pause()
+                    }
+
+                    PlaystateCommand.UNPAUSE -> {
+                        player.play()
+                    }
+
+                    PlaystateCommand.NEXT_TRACK -> {
+                        playNextUp()
+                    }
+
+                    PlaystateCommand.PREVIOUS_TRACK -> {
+                        playPrevious()
+                    }
+
+                    PlaystateCommand.SEEK -> {
+                        timeline.mark(
+                            "remote SEEK command from the server to ${request.seekPositionTicks?.ticks?.inWholeMilliseconds}ms",
+                        )
+                        request.seekPositionTicks?.ticks?.let {
+                            player.seekTo(it.inWholeMilliseconds)
+                        }
+                    }
+
+                    PlaystateCommand.REWIND -> {
+                        player.seekBack(
+                            preferences.appPreferences.playbackPreferences.skipBackMs.milliseconds,
+                        )
+                    }
+
+                    PlaystateCommand.FAST_FORWARD -> {
+                        player.seekForward(
+                            preferences.appPreferences.playbackPreferences.skipForwardMs.milliseconds,
+                        )
+                    }
+
+                    PlaystateCommand.PLAY_PAUSE -> {
+                        Util.handlePlayPauseButtonAction(player)
+                    }
+                }
+            }
 
         /**
          * Atomically update [currentMediaInfo]

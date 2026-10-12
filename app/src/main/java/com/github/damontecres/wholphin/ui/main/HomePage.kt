@@ -662,17 +662,31 @@ fun HomePageHeader(
     newEpisode: String? = null,
 ) {
     val isEpisode = item?.type == BaseItemKind.EPISODE
-    val dto = item?.data
+    val title =
+        remember(item?.id) {
+            when (item?.type) {
+                BaseItemKind.EPISODE,
+                BaseItemKind.SEASON,
+                -> item.data.seriesName
+
+                else -> item?.title
+            }
+        }
+    val subtitle =
+        remember(item?.id) {
+            when (item?.type) {
+                BaseItemKind.SEASON,
+                BaseItemKind.EPISODE,
+                -> item.name
+
+                else -> null
+            }
+        }
     HomePageHeader(
-        title = item?.title,
-        subtitle =
-            if (isEpisode) {
-                dto?.name
-            } else {
-                // Fork: a show standing in for a new episode says which one, see NewEpisodeSeries
-                newEpisode?.let { stringResource(R.string.new_episode_line, it) }
-            },
-        overview = dto?.overview,
+        title = title,
+        // Fork: a show standing in for a new episode says which one, see NewEpisodeSeries
+        subtitle = subtitle ?: newEpisode?.let { stringResource(R.string.new_episode_line, it) },
+        overview = item?.data?.overview,
         overviewTwoLines = isEpisode,
         quickDetails = item?.ui?.quickDetails,
         timeRemaining = item?.timeRemainingOrRuntime,
