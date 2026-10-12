@@ -36,8 +36,10 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.key.KeyEvent
+import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
@@ -58,6 +60,7 @@ import com.github.damontecres.wholphin.data.model.HomeRowViewOptions
 import com.github.damontecres.wholphin.data.model.QuickDetailsData
 import com.github.damontecres.wholphin.games.ui.GameHomeHeader
 import com.github.damontecres.wholphin.games.ui.GamesHomeRow
+import com.github.damontecres.wholphin.preferences.HomeHoldSpeed
 import com.github.damontecres.wholphin.preferences.UserPreferences
 import com.github.damontecres.wholphin.services.ResolvedPill
 import com.github.damontecres.wholphin.services.NewEpisodeSeries
@@ -237,6 +240,11 @@ fun HomePage(
                 showViewMore = true,
                 onClickViewMore = onClickViewMore,
                 showQuickPills = true,
+                holdIntervalMs =
+                    HoldThrottle.intervalFor(preferences.appPreferences.homePagePreferences.homeHoldSpeed),
+                navLogEnabled =
+                    preferences.appPreferences.homePagePreferences.homeHoldSpeed != HomeHoldSpeed.HOLD_STEADY ||
+                        preferences.appPreferences.debugLogging,
                 modifier = modifier,
             )
             overviewDialog?.let { info ->
@@ -312,6 +320,8 @@ fun HomePageContent(
     },
     onClickViewMore: (RowColumn, HomeRowLoadingState.Success) -> Unit = { _, _ -> },
     showQuickPills: Boolean = false,
+    holdIntervalMs: Long = HoldThrottle.HOLD_ROW_INTERVAL_MS,
+    navLogEnabled: Boolean = false,
 ) {
     // Fork (GooseFlix #1421): an optional first row of one-press pills, for accounts that have them
     val pillsViewModel: QuickPillsViewModel? = if (showQuickPills) hiltViewModel() else null
@@ -398,12 +408,24 @@ fun HomePageContent(
         if (focusedPill == null) focusedItem?.let { onUpdateBackdrop.invoke(it) }
     }
     // Fork: a held up/down moves one row at a time at a steady pace, see HoldThrottle
-    val holdThrottle = remember { HoldThrottle() }
+    val holdThrottle = remember(holdIntervalMs) { HoldThrottle(holdIntervalMs) }
+    val navLog = remember(navLogEnabled) { HomeNavLog(navLogEnabled) }
     Box(modifier = modifier) {
         Column(
             modifier =
                 Modifier
-                    .onPreviewKeyEvent { holdThrottle.consumes(it) }
+                    .onPreviewKeyEvent { event ->
+                        holdThrottle.consumes(event, navLog::log.takeIf { navLog.enabled }).also { dropped ->
+                            if (navLog.enabled && !dropped && event.type == KeyEventType.KeyDown) {
+                                val visible = listState.layoutInfo.visibleItemsInfo.map { it.index }
+                                navLog.log(
+                                    "  at row=${currentPosition.row} col=${currentPosition.column} " +
+                                        "pill=${focusedPill != null} first=${listState.firstVisibleItemIndex} " +
+                                        "visible=$visible scrolling=${listState.isScrollInProgress}",
+                                )
+                            }
+                        }
+                    }
                     .focusProperties {
                         onEnter = {
                             rowFocusRequesters.getOrNull(currentPosition.row)?.tryRequestFocus()
@@ -448,7 +470,11 @@ fun HomePageContent(
                         ),
                     modifier =
                         Modifier
-                            .focusRestorer(),
+                            .focusRestorer()
+                            .onFocusChanged {
+                                // Fork: focus leaving the list entirely is the stuck state
+                                navLog.log("list hasFocus=${it.hasFocus} isFocused=${it.isFocused}")
+                            },
                 ) {
                     if (pills.isNotEmpty()) {
                         item(key = "quick_pills") {
@@ -473,7 +499,10 @@ fun HomePageContent(
                             Modifier
                                 .animateItem(placementSpec = null)
                                 .padding(bottom = 8.dp)
-                                .onFocusChanged { if (it.hasFocus) lastFocusOnPills = false }
+                                .onFocusChanged {
+                                    if (it.hasFocus) lastFocusOnPills = false
+                                    navLog.log("row $rowIndex hasFocus=${it.hasFocus}")
+                                }
                         CompositionLocalProvider(
                             LocalBringIntoViewSpec provides defaultBringIntoViewSpec,
                         ) {
@@ -554,6 +583,7 @@ fun HomePageContent(
                                                 val onFocus =
                                                     remember(rowIndex, index) {
                                                         { isFocused: Boolean ->
+                                                            if (isFocused) navLog.log("card row=$rowIndex col=$index focused")
                                                             if (isFocused) {
                                                                 currentOnFocusPosition(
                                                                     RowColumn(

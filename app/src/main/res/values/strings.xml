@@ -189,6 +189,12 @@
     <string name="recently_added_show_series_on">A single new episode in Recently Added shows its show\'s details</string>
     <string name="recently_added_show_series_off">A single new episode in Recently Added shows the episode</string>
     <string name="new_episode_line">New episode · %1$s</string>
+    <string name="home_hold_speed">Home hold speed (testing)</string>
+    <string-array name="home_hold_speed_options">
+        <item>Steady (0.15s per row)</item>
+        <item>Faster (0.075s per row)</item>
+        <item>No limit, may get stuck</item>
+    </string-array>
     <string name="aired_episode_order">Aired Episode Order</string>
     <string name="create_playlist">Create new playlist</string>
     <string name="add_to_playlist">Add to playlist</string>

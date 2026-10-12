@@ -140,6 +140,14 @@ message HomePagePreferences{
   // Recently Added shows a single new episode as the episode (upstream's way) rather than as its
   // show (GooseFlix #1501); off, the default, shows the show
   bool recently_added_episode_details = 501;
+  // How fast a held up/down moves on the home page; for testing the stuck-focus bug (#2034)
+  HomeHoldSpeed home_hold_speed = 502;
+}
+
+enum HomeHoldSpeed {
+  HOLD_STEADY = 0;
+  HOLD_FASTER = 1;
+  HOLD_NO_LIMIT = 2;
 }
 
 enum ThemeSongVolume {

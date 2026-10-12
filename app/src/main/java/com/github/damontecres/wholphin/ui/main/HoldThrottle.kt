@@ -5,6 +5,7 @@ import android.view.KeyEvent.KEYCODE_DPAD_UP
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.type
+import com.github.damontecres.wholphin.preferences.HomeHoldSpeed
 
 /**
  * Fork-only: paces up/down while the button is held on the home page (#2034 upstream).
@@ -31,14 +32,30 @@ class HoldThrottle(
     }
 
     /** True if [event] is a held up/down repeat that should be dropped */
-    fun consumes(event: KeyEvent): Boolean {
+    fun consumes(
+        event: KeyEvent,
+        log: ((String) -> Unit)? = null,
+    ): Boolean {
         if (event.type != KeyEventType.KeyDown) return false
         val native = event.nativeKeyEvent
         if (native.keyCode != KEYCODE_DPAD_UP && native.keyCode != KEYCODE_DPAD_DOWN) return false
-        return !allow(native.repeatCount, native.eventTime)
+        val allowed = allow(native.repeatCount, native.eventTime)
+        log?.invoke(
+            "key ${if (native.keyCode == KEYCODE_DPAD_DOWN) "DOWN" else "UP"} repeat=${native.repeatCount} " +
+                if (allowed) "moved" else "dropped",
+        )
+        return !allowed
     }
 
     companion object {
         const val HOLD_ROW_INTERVAL_MS = 150L
+
+        /** The interval for the "Home hold speed" testing setting */
+        fun intervalFor(speed: HomeHoldSpeed): Long =
+            when (speed) {
+                HomeHoldSpeed.HOLD_FASTER -> 75L
+                HomeHoldSpeed.HOLD_NO_LIMIT -> 0L
+                else -> HOLD_ROW_INTERVAL_MS
+            }
     }
 }
