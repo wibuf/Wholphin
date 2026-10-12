@@ -22,6 +22,7 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import com.github.damontecres.wholphin.BuildConfig
 import com.github.damontecres.wholphin.R
 import com.github.damontecres.wholphin.data.model.QuickDetailsData
 import com.github.damontecres.wholphin.preferences.DisplayToggle
@@ -63,7 +64,11 @@ fun QuickDetails(
             }
             MdbListRatings(itemId, textStyle = textStyle)
         }
-        if (timeRemaining != null) {
+        // Fork (GooseFlix #1451): no "Ends at" here, where it pushed the ratings off the end of
+        // the line; the player still shows it
+        if (BuildConfig.GOOSEFLIX) {
+            // Nothing
+        } else if (timeRemaining != null) {
             TimeRemaining(timeRemaining, textStyle = textStyle)
         } else if (endsAt != null) {
             EndsAt(endsAt, textStyle = textStyle)

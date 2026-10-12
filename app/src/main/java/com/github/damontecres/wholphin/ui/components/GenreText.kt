@@ -8,6 +8,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import com.github.damontecres.wholphin.BuildConfig
 
 private const val MAX_TO_SHOW = 4
 
@@ -25,7 +26,8 @@ fun GenreText(
 ) {
     val text =
         remember(genres) {
-            if (genres.size <= MAX_TO_SHOW) {
+            // Fork (GooseFlix #1451): every genre; one line, ending in "…" if they don't all fit
+            if (BuildConfig.GOOSEFLIX || genres.size <= MAX_TO_SHOW) {
                 genres.joinToString(", ")
             } else {
                 genres
@@ -38,6 +40,7 @@ fun GenreText(
         style = textStyle,
         color = color,
         overflow = TextOverflow.Ellipsis,
+        maxLines = if (BuildConfig.GOOSEFLIX) 1 else Int.MAX_VALUE,
         modifier = modifier,
     )
 }
