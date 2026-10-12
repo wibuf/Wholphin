@@ -25,9 +25,11 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -35,9 +37,13 @@ import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
@@ -51,6 +57,7 @@ import androidx.lifecycle.compose.LifecycleStartEffect
 import androidx.lifecycle.lifecycleScope
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import com.github.damontecres.wholphin.BuildConfig
 import com.github.damontecres.wholphin.R
 import com.github.damontecres.wholphin.data.model.BaseItem
 import com.github.damontecres.wholphin.data.model.HomeRowConfig
@@ -397,13 +404,64 @@ fun HomePageContent(
         // Also on leaving the pills, whose backdrop would otherwise stay up behind the row item
         if (focusedPill == null) focusedItem?.let { onUpdateBackdrop.invoke(it) }
     }
-    // Fork: a held up/down moves one row at a time at a steady pace, see HoldThrottle
-    val holdThrottle = remember { HoldThrottle() }
+    // Fork: up/down between rows are moved by hand, see HomeRowNav
+    val navScope = rememberCoroutineScope()
+    var rowMoveInFlight by remember { mutableStateOf(false) }
+
+    // The row a move just sent focus to, until the page records focus landing there. A held
+    // button's next repeat can arrive first, and must carry on from here, not the row before.
+    var pendingRow by remember { mutableStateOf<Int?>(null) }
+    val focusableRows = remember(homeRows) { HomeRowNav.focusable(homeRows) }
+
+    /** Moves focus to the next row with something in it; false to leave the key to the default */
+    fun moveRow(step: Int): Boolean {
+        if (pendingRow == currentPosition.row) pendingRow = null
+        val target = HomeRowNav.next(focusableRows, pendingRow ?: currentPosition.row, step) ?: return false
+        val requester = rowFocusRequesters.getOrNull(target) ?: return false
+        rowMoveInFlight = true
+        navScope.launch {
+            try {
+                if (requester.tryRequestFocus()) {
+                    pendingRow = target
+                } else {
+                    // Not laid out yet: jump the list there, then focus it once it is
+                    listState.scrollToItem(target + pillsOffset)
+                    repeat(ROW_FOCUS_ATTEMPTS) {
+                        withFrameNanos { }
+                        if (requester.tryRequestFocus()) {
+                            pendingRow = target
+                            return@launch
+                        }
+                    }
+                    pendingRow = null
+                    Timber.w("Could not focus home row %d", target)
+                }
+            } finally {
+                rowMoveInFlight = false
+            }
+        }
+        return true
+    }
     Box(modifier = modifier) {
         Column(
             modifier =
                 Modifier
-                    .onPreviewKeyEvent { holdThrottle.consumes(it, if (focusedPill != null) -1 else currentPosition.row) }
+                    .onPreviewKeyEvent { event ->
+                        val step =
+                            when (event.key) {
+                                Key.DirectionDown -> 1
+                                Key.DirectionUp -> -1
+                                else -> 0
+                            }
+                        when {
+                            !BuildConfig.GOOSEFLIX || step == 0 || event.type != KeyEventType.KeyDown -> false
+                            // The pills row moves the default way
+                            focusedPill != null || currentPosition.row < 0 -> false
+                            // A held button's repeats wait for the last move to land
+                            rowMoveInFlight -> true
+                            else -> moveRow(step)
+                        }
+                    }
                     .focusProperties {
                         onEnter = {
                             rowFocusRequesters.getOrNull(currentPosition.row)?.tryRequestFocus()
@@ -882,3 +940,6 @@ fun HomePageViewMoreCard(
 /** How many frames-ish to retry focusing the quick pills before giving up (50 ms apart) */
 private const val PILL_FOCUS_ATTEMPTS = 20
 private const val LIVE_PILLS_INTERVAL_MS = 60_000L
+
+/** Fork: frames to keep trying to focus a home row the list was scrolled to */
+private const val ROW_FOCUS_ATTEMPTS = 20
