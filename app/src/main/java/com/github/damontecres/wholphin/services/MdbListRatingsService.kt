@@ -97,6 +97,10 @@ class MdbListRatingsService
                         "TMDB.png"
                     }
 
+                    MdbListSource.MAL -> {
+                        "mal.png"
+                    }
+
                     MdbListSource.TOMATOES -> {
                         if (value >= FRESH_THRESHOLD) {
                             "Rotten_Tomatoes.png"

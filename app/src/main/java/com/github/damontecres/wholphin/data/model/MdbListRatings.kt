@@ -53,4 +53,7 @@ enum class MdbListSource(
 
     /** Out of 100 */
     TMDB("tmdb"),
+
+    /** MyAnimeList, out of 10. MDBList only has it for anime. */
+    MAL("myanimelist"),
 }

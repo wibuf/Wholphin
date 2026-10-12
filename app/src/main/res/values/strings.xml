@@ -419,6 +419,7 @@
     <string name="mdblist_tomatoes" translatable="false">Rotten Tomatoes</string>
     <string name="mdblist_popcorn" translatable="false">Rotten Tomatoes audience</string>
     <string name="mdblist_tmdb" translatable="false">TMDB</string>
+    <string name="mdblist_mal" translatable="false">MyAnimeList</string>
     <string name="mdblist_requires_plugin">Requires the MDBList Ratings plugin on the server</string>
     <string name="background_color">Background color</string>
     <string name="reset">Reset</string>
@@ -818,11 +819,13 @@
         <item>@string/mdblist_tomatoes</item>
         <item>@string/mdblist_popcorn</item>
         <item>@string/mdblist_tmdb</item>
+        <item>@string/mdblist_mal</item>
     </string-array>
     <string-array name="display_toggle_types_subtitles">
         <item></item><!-- Intentionally blank -->
         <item>@string/tomatoes</item>
         <item>@string/stars</item>
+        <item>@string/mdblist_requires_plugin</item>
         <item>@string/mdblist_requires_plugin</item>
         <item>@string/mdblist_requires_plugin</item>
         <item>@string/mdblist_requires_plugin</item>

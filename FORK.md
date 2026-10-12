@@ -76,7 +76,7 @@ Newest first within each area. The numbers are GooseFlix issues unless they say 
 - Game libraries only show for users who can see that library in Jellyfin. The plugin itself doesn't check permissions.
 
 ### Ratings and details
-- IMDb, Rotten Tomatoes (critics and Popcornmeter) and TMDB ratings from the MDBList Ratings plugin, with provider logos (#1862; `services/MdbListRatingsService.kt`, `ui/components/MdbListRatingsRow.kt`).
+- IMDb, MyAnimeList (anime), Rotten Tomatoes (critics and Popcornmeter) and TMDB ratings from the MDBList Ratings plugin, with provider logos (#1862; `services/MdbListRatingsService.kt`, `ui/components/MdbListRatingsRow.kt`).
 - The server's own critic and community scores are hidden by default.
 - Details pages show every genre on one line (upstream stops at four and adds "+N"), and drop "Ends at" from the details line so the ratings fit; the player still shows it (#1451).
 

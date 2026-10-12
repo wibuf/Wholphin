@@ -235,6 +235,7 @@ enum DisplayToggle{
   MDBLIST_TOMATOES = 501;
   MDBLIST_POPCORN = 502;
   MDBLIST_TMDB = 503;
+  MDBLIST_MAL = 504;
 }
 
 message InterfacePreferences {

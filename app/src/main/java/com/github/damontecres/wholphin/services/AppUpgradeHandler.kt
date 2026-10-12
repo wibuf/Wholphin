@@ -6,6 +6,7 @@ import android.os.Build
 import androidx.core.content.edit
 import androidx.datastore.core.DataStore
 import androidx.preference.PreferenceManager
+import com.github.damontecres.wholphin.BuildConfig
 import com.github.damontecres.wholphin.data.JellyfinServerDao
 import com.github.damontecres.wholphin.data.RememberedTabDao
 import com.github.damontecres.wholphin.data.SeerrServerDao
@@ -13,6 +14,7 @@ import com.github.damontecres.wholphin.data.model.JellyfinUser
 import com.github.damontecres.wholphin.data.model.RememberedTab
 import com.github.damontecres.wholphin.preferences.AppPreference
 import com.github.damontecres.wholphin.preferences.AppPreferences
+import com.github.damontecres.wholphin.preferences.DisplayToggle
 import com.github.damontecres.wholphin.preferences.ExperimentalPreference
 import com.github.damontecres.wholphin.preferences.ScreensaverPreference
 import com.github.damontecres.wholphin.preferences.update
@@ -439,6 +441,18 @@ class AppUpgradeHandler
                         }
                     } else {
                         it
+                    }
+                }
+            }
+
+            // Fork-only (GooseFlix #1451): the MyAnimeList rating arrived after the other ratings
+            // were set up, so turn it on once for installs that already have their toggles
+            if (BuildConfig.GOOSEFLIX && previous.isEqualOrBefore(Version.fromString("1.0.7-119-g0"))) {
+                appPreferences.updateData {
+                    if (DisplayToggle.MDBLIST_MAL in it.interfacePreferences.displayTogglesList) {
+                        it
+                    } else {
+                        it.updateInterfacePreferences { addDisplayToggles(DisplayToggle.MDBLIST_MAL) }
                     }
                 }
             }

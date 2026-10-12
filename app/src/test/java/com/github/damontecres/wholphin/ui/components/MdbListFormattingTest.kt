@@ -52,6 +52,16 @@ class MdbListFormattingTest {
     }
 
     @Test
+    fun `myanimelist reads out of ten, from a value or a score`() {
+        // Your Lie in April, from a live server
+        val mal = parse("""{"hasCache":true,"ratings":[{"source":"myanimelist","value":8.6,"score":86,"votes":1493772}]}""")
+        assertEquals("8.6", formatRating(MdbListSource.MAL, mal.valueFor(MdbListSource.MAL)!!))
+        val onlyScore = parse("""{"hasCache":true,"ratings":[{"source":"myanimelist","score":86}]}""")
+        assertEquals(8.6, onlyScore.valueFor(MdbListSource.MAL)!!, 0.001)
+        assertNull(sample.valueFor(MdbListSource.MAL))
+    }
+
+    @Test
     fun `a source returned bare has no value`() {
         // The live response includes {"source":"tmdb"} style entries with nothing else on them
         val bare = parse("""{"hasCache":true,"ratings":[{"source":"tmdb"},{"source":"imdb"}]}""")
