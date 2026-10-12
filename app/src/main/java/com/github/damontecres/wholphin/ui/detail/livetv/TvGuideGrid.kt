@@ -22,16 +22,23 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -40,6 +47,7 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
 import androidx.tv.material3.SurfaceDefaults
 import androidx.tv.material3.Text
+import com.github.damontecres.wholphin.BuildConfig
 import com.github.damontecres.wholphin.R
 import com.github.damontecres.wholphin.preferences.LiveTvPreferences
 import com.github.damontecres.wholphin.preferences.UserPreferences
@@ -319,9 +327,41 @@ fun TvGuideGridContent(
     val scope = rememberCoroutineScope()
     val guideStart = remember(guideTimes) { guideTimes.first() }
 
+    val programFocusRequester = remember { FocusRequester() }
     var focusedChannelIndex by rememberInt(-1)
     var focusedItem by rememberPosition(RowColumn(0, 0))
     var focusedProgramIndex by rememberInt(0)
+
+    // Fork: up/down keep to the time you're looking at, see GuideFocus
+    val nowHours = remember(guideStart) { hoursBetween(guideStart, LocalDateTime.now()) }
+    var anchorHours by remember(guideStart) { mutableFloatStateOf(nowHours) }
+    var movedSideways by remember { mutableStateOf(false) }
+    val slotStarts = remember(guideTimes) { guideTimes.map { hoursBetween(guideStart, it) } }
+
+    /** Up/down from a programme: straight to what's on at the anchor time in the next channel */
+    fun moveVertically(step: Int): Boolean {
+        val current = programs.programs.getOrNull(focusedProgramIndex) ?: return false
+        val row = channels.indexOfFirst { it.id == current.channelId }
+        val target = channels.getOrNull(row + step) ?: return false
+        val index = GuideFocus.programAt(programs.programs, target.id, anchorHours) ?: return false
+        movedSideways = false
+        focusedProgramIndex = index
+        scope.launch {
+            try {
+                state.animateToChannel(row + step, Alignment.CenterVertically)
+            } catch (ex: Exception) {
+                Timber.e(ex, "Couldn't scroll to channel ${row + step}")
+            }
+        }
+        scope.launch {
+            // The programme may only be laid out once the guide has started scrolling to it
+            repeat(GUIDE_FOCUS_ATTEMPTS) {
+                if (programFocusRequester.tryRequestFocus()) return@launch
+                withFrameNanos { }
+            }
+        }
+        return true
+    }
 
     LaunchedEffect(onFocus, focusedProgramIndex) {
         withContext(WholphinDispatchers.Default) {
@@ -340,8 +380,6 @@ fun TvGuideGridContent(
             }
         }
     }
-    val programFocusRequester = remember { FocusRequester() }
-
     BackHandler(focusedItem.row > 0) {
         scope.launch {
             focusedProgramIndex = 0
@@ -370,7 +408,28 @@ fun TvGuideGridContent(
         ProgramGuide(
             state = state,
             dimensions = tvGuideDimensions,
-            modifier = Modifier.fillMaxSize(),
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .onPreviewKeyEvent { event ->
+                        if (!BuildConfig.GOOSEFLIX || event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                        when (event.key) {
+                            Key.DirectionLeft, Key.DirectionRight -> {
+                                movedSideways = true
+                                false
+                            }
+
+                            Key.DirectionUp, Key.DirectionDown -> {
+                                movedSideways = false
+                                focusedChannelIndex < 0 &&
+                                    moveVertically(if (event.key == Key.DirectionDown) 1 else -1)
+                            }
+
+                            else -> {
+                                false
+                            }
+                        }
+                    },
         ) {
             guideStartHour = 0f
             currentTime(
@@ -473,14 +532,26 @@ fun TvGuideGridContent(
                                 Modifier.focusRequester(focusRequester),
                             ).onFocusChanged {
                                 if (it.isFocused) {
+                                    val cameFromChannel = focusedChannelIndex >= 0
                                     focusedChannelIndex = -1
                                     focusedProgramIndex = programIndex
                                     scope.launch {
                                         try {
-                                            state.animateToProgram(
-                                                programIndex,
-                                                Alignment.Center,
-                                            )
+                                            if (!BuildConfig.GOOSEFLIX || cameFromChannel) {
+                                                state.animateToProgram(
+                                                    programIndex,
+                                                    Alignment.Center,
+                                                )
+                                            } else if (movedSideways) {
+                                                // Fork: sideways sets the time you're looking at
+                                                // and scrolls only sideways, to keep it in view
+                                                anchorHours = GuideFocus.anchorFor(program.startHours, nowHours)
+                                                state.animateToTimeline(
+                                                    GuideFocus.slotAt(slotStarts, anchorHours),
+                                                    Alignment.Start,
+                                                )
+                                            }
+                                            // Up/down already scrolled to the channel (moveVertically)
                                         } catch (ex: Exception) {
                                             Timber.e(ex, "Couldn't scroll to $programIndex")
                                         }
@@ -548,3 +619,6 @@ fun TvGuideGridContent(
         }
     }
 }
+
+/** Fork: frames to keep trying to focus a programme the guide is scrolling to */
+private const val GUIDE_FOCUS_ATTEMPTS = 20
