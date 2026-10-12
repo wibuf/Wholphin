@@ -403,7 +403,7 @@ fun HomePageContent(
         Column(
             modifier =
                 Modifier
-                    .onPreviewKeyEvent { holdThrottle.consumes(it) }
+                    .onPreviewKeyEvent { holdThrottle.consumes(it, if (focusedPill != null) -1 else currentPosition.row) }
                     .focusProperties {
                         onEnter = {
                             rowFocusRequesters.getOrNull(currentPosition.row)?.tryRequestFocus()
