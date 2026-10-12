@@ -185,6 +185,10 @@
     <string name="show_clock">Show Clock</string>
     <string name="show_quick_pills">Show quick pills</string>
     <string name="show_quick_pills_on">Shown when this account has quick pills</string>
+    <string name="recently_added_show_series">Show the series for new episodes</string>
+    <string name="recently_added_show_series_on">A single new episode in Recently Added shows its show\'s details</string>
+    <string name="recently_added_show_series_off">A single new episode in Recently Added shows the episode</string>
+    <string name="new_episode_line">New episode · %1$s</string>
     <string name="aired_episode_order">Aired Episode Order</string>
     <string name="create_playlist">Create new playlist</string>
     <string name="add_to_playlist">Add to playlist</string>

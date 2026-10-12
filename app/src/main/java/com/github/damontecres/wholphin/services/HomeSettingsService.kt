@@ -59,12 +59,14 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.jellyfin.sdk.api.client.ApiClient
+import org.jellyfin.sdk.api.client.extensions.itemsApi
 import org.jellyfin.sdk.api.client.extensions.liveTvApi
 import org.jellyfin.sdk.api.client.extensions.userApi
 import org.jellyfin.sdk.api.client.extensions.userLibraryApi
 import org.jellyfin.sdk.api.client.extensions.userViewsApi
 import org.jellyfin.sdk.model.DateTime
 import org.jellyfin.sdk.model.UUID
+import org.jellyfin.sdk.model.api.BaseItemDto
 import org.jellyfin.sdk.model.api.BaseItemKind
 import org.jellyfin.sdk.model.api.CollectionType
 import org.jellyfin.sdk.model.api.GetProgramsDto
@@ -677,6 +679,30 @@ class HomeSettingsService
                 ResStringProvider(R.string.unknown)
             }
 
+        /** Fork-only (GooseFlix #1501): a single new episode as its show, see [NewEpisodeSeries] */
+        private suspend fun swapNewEpisodes(
+            items: List<BaseItemDto>,
+            prefs: HomePagePreferences,
+            fields: List<ItemFields>?,
+        ): List<BaseItemDto> {
+            if (!NewEpisodeSeries.enabled(prefs)) return items
+            val ids = NewEpisodeSeries.seriesIds(items)
+            if (ids.isEmpty()) return items
+            return try {
+                val series =
+                    api.itemsApi
+                        .getItems(GetItemsRequest(ids = ids, fields = fields))
+                        .content.items
+                        .associateBy { it.id }
+                NewEpisodeSeries.swap(items, series)
+            } catch (ex: CancellationException) {
+                throw ex
+            } catch (ex: Exception) {
+                Timber.w(ex, "Could not fetch the shows for new episodes, showing the episodes")
+                items
+            }
+        }
+
         /**
          * Fetch the data from the server for a given [HomeRowConfig]
          */
@@ -901,6 +927,7 @@ class HomeSettingsService
                         api.userLibraryApi
                             .getLatestMedia(request)
                             .content
+                            .let { swapNewEpisodes(it, prefs, library.itemFields) }
                             .map { BaseItem(it, row.viewOptions.useSeries) }
                             .let {
                                 Success(

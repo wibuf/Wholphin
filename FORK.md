@@ -65,6 +65,7 @@ Newest first within each area. The numbers are GooseFlix issues unless they say 
 - Quick pills: a row of shortcut buttons at the top (Guide, favourite channels) per user, set in Scuffed's admin page (`services/QuickPillsService.kt`, `ui/main/QuickPills.kt`).
 - Live game pills for the Patriots, Celtics, Bruins and Red Sox, first in the pill row while a game or its pregame is on. They come from Scuffed's `/api/gooseflix/live` (#1427, #1422).
 - Rows for libraries added after the user saved their home settings, placed in library order (`services/NewHomeRows.kt`).
+- Recently Added shows a single new episode as its show (card, header and click), with a "New episode · S1 E2 · Name" line in the header. Setting: Interface → "Show the series for new episodes", on by default (#1501; `services/NewEpisodeSeries.kt`).
 - Defaults: Continue Watching and Next Up as separate rows, no Watch Live row, 50 items per row.
 - Holding up or down moves at a steady pace, so focus can't get lost on a long home page (`ui/main/HoldThrottle.kt`; upstream damontecres/Wholphin#2034).
 - The previous user's rows are cleared when switching user.

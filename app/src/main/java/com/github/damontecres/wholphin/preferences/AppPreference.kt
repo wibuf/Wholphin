@@ -229,6 +229,19 @@ sealed interface AppPreference<Pref, T> {
                 summaryOff = R.string.disabled,
             )
 
+        // Fork-only (GooseFlix #1501): a single new episode in Recently Added shown as its show
+        val RecentlyAddedShowSeries =
+            AppSwitchPreference<AppPreferences>(
+                title = R.string.recently_added_show_series,
+                defaultValue = true,
+                getter = { !it.homePagePreferences.recentlyAddedEpisodeDetails },
+                setter = { prefs, value ->
+                    prefs.updateHomePagePreferences { recentlyAddedEpisodeDetails = !value }
+                },
+                summaryOn = R.string.recently_added_show_series_on,
+                summaryOff = R.string.recently_added_show_series_off,
+            )
+
         val HomeClickToPlay =
             AppChoicePreference<AppPreferences, Boolean>(
                 title = R.string.continue_watching_click_behavior,
@@ -1195,7 +1208,7 @@ val basicPreferences =
                     AppPreference.SubtitleStyle,
                     AppPreference.ThemeColors,
                     AppPreference.ScreensaverSettings,
-                ),
+                ) + listOfNotNull(AppPreference.RecentlyAddedShowSeries.takeIf { BuildConfig.GOOSEFLIX }),
         ),
         PreferenceGroup(
             title = R.string.playback,

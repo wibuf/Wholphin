@@ -136,6 +136,9 @@ message HomePagePreferences{
   // Fork fields start at 500 so upstream's sequential numbering never collides with them.
   // Hides this device's quick pills row (GooseFlix #1421); off, the default, shows it
   bool hide_quick_pills = 500;
+  // Recently Added shows a single new episode as the episode (upstream's way) rather than as its
+  // show (GooseFlix #1501); off, the default, shows the show
+  bool recently_added_episode_details = 501;
 }
 
 enum ThemeSongVolume {

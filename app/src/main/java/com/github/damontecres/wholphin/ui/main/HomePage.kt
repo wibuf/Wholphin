@@ -60,6 +60,7 @@ import com.github.damontecres.wholphin.games.ui.GameHomeHeader
 import com.github.damontecres.wholphin.games.ui.GamesHomeRow
 import com.github.damontecres.wholphin.preferences.UserPreferences
 import com.github.damontecres.wholphin.services.ResolvedPill
+import com.github.damontecres.wholphin.services.NewEpisodeSeries
 import com.github.damontecres.wholphin.ui.Cards
 import com.github.damontecres.wholphin.ui.cards.BannerCard
 import com.github.damontecres.wholphin.ui.cards.BannerCardWithTitle
@@ -306,6 +307,7 @@ fun HomePageContent(
             item = focusedItem,
             showLogo = showLogo,
             modifier = HeaderUtils.modifier,
+            newEpisode = NewEpisodeSeries.label(focusedItem),
         )
     },
     onClickViewMore: (RowColumn, HomeRowLoadingState.Success) -> Unit = { _, _ -> },
@@ -657,12 +659,19 @@ fun HomePageHeader(
     item: BaseItem?,
     showLogo: Boolean,
     modifier: Modifier = Modifier,
+    newEpisode: String? = null,
 ) {
     val isEpisode = item?.type == BaseItemKind.EPISODE
     val dto = item?.data
     HomePageHeader(
         title = item?.title,
-        subtitle = if (isEpisode) dto?.name else null,
+        subtitle =
+            if (isEpisode) {
+                dto?.name
+            } else {
+                // Fork: a show standing in for a new episode says which one, see NewEpisodeSeries
+                newEpisode?.let { stringResource(R.string.new_episode_line, it) }
+            },
         overview = dto?.overview,
         overviewTwoLines = isEpisode,
         quickDetails = item?.ui?.quickDetails,
