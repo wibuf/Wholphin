@@ -67,7 +67,7 @@ Newest first within each area. The numbers are GooseFlix issues unless they say 
 - Rows for libraries added after the user saved their home settings, placed in library order (`services/NewHomeRows.kt`).
 - Recently Added shows a single new episode as its show (card, header and click), with a "New episode · S1 E2 · Name" line in the header. Setting: Interface → "Show the series for new episodes", on by default (#1501; `services/NewEpisodeSeries.kt`).
 - Defaults: Continue Watching and Next Up as separate rows, no Watch Live row, 50 items per row.
-- Holding up or down on the home page moves one row every 150 ms, so focus can't outrun the list and get lost (`ui/main/HoldThrottle.kt`; upstream damontecres/Wholphin#2034). Faster versions (moving as soon as focus landed, and moving rows by hand) got stuck on the Shield and were rolled back. For finding the real cause: Advanced → "Home hold speed (testing)" can be set to Faster or No limit, which also turns on the `GooseFlixNav` logcat log of every key, row and card focus change, and list scroll position (`ui/main/HomeNavLog.kt`).
+- Holding up or down on the home page moves one row every 75 ms, the fastest the Shield held without focus getting stuck; every repeat (no limit) gets stuck (`ui/main/HoldThrottle.kt`; upstream damontecres/Wholphin#2034). With verbose logging on, the `GooseFlixNav` logcat tag logs each key, row/card focus change and the list's scroll position (`ui/main/HomeNavLog.kt`).
 - The previous user's rows are cleared when switching user.
 
 ### Video games

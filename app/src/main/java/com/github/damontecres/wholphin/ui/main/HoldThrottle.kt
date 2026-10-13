@@ -5,7 +5,6 @@ import android.view.KeyEvent.KEYCODE_DPAD_UP
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.type
-import com.github.damontecres.wholphin.preferences.HomeHoldSpeed
 
 /**
  * Fork-only: paces up/down while the button is held on the home page (#2034 upstream).
@@ -48,14 +47,12 @@ class HoldThrottle(
     }
 
     companion object {
-        const val HOLD_ROW_INTERVAL_MS = 150L
+        /**
+         * The fastest the Shield held without focus getting stuck: every repeat (no limit) got
+         * stuck, 75 ms didn't. Was 150 ms, which held too but felt slow next to left/right.
+         */
+        const val HOLD_ROW_INTERVAL_MS = 75L
 
-        /** The interval for the "Home hold speed" testing setting */
-        fun intervalFor(speed: HomeHoldSpeed): Long =
-            when (speed) {
-                HomeHoldSpeed.HOLD_FASTER -> 75L
-                HomeHoldSpeed.HOLD_NO_LIMIT -> 0L
-                else -> HOLD_ROW_INTERVAL_MS
-            }
+
     }
 }

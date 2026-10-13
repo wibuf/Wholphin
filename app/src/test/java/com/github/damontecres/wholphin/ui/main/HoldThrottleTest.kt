@@ -24,9 +24,10 @@ class HoldThrottleTest {
     }
 
     @Test
-    fun noLimitLetsEveryRepeatThrough() {
-        val t = HoldThrottle(HoldThrottle.intervalFor(com.github.damontecres.wholphin.preferences.HomeHoldSpeed.HOLD_NO_LIMIT))
+    fun theDefaultPaceMovesEveryOtherRepeat() {
+        val t = HoldThrottle()
         val moves = (listOf(0 to 0L) + (1..32).map { it to 400L + (it - 1) * 50 }).count { (r, at) -> t.allow(r, at) }
-        assertEquals(33, moves)
+        // 1 press + every other 50 ms repeat from 400 to 1950 ms
+        assertEquals(17, moves)
     }
 }

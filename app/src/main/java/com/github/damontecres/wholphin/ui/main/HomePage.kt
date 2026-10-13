@@ -60,7 +60,6 @@ import com.github.damontecres.wholphin.data.model.HomeRowViewOptions
 import com.github.damontecres.wholphin.data.model.QuickDetailsData
 import com.github.damontecres.wholphin.games.ui.GameHomeHeader
 import com.github.damontecres.wholphin.games.ui.GamesHomeRow
-import com.github.damontecres.wholphin.preferences.HomeHoldSpeed
 import com.github.damontecres.wholphin.preferences.UserPreferences
 import com.github.damontecres.wholphin.services.ResolvedPill
 import com.github.damontecres.wholphin.services.NewEpisodeSeries
@@ -240,11 +239,7 @@ fun HomePage(
                 showViewMore = true,
                 onClickViewMore = onClickViewMore,
                 showQuickPills = true,
-                holdIntervalMs =
-                    HoldThrottle.intervalFor(preferences.appPreferences.homePagePreferences.homeHoldSpeed),
-                navLogEnabled =
-                    preferences.appPreferences.homePagePreferences.homeHoldSpeed != HomeHoldSpeed.HOLD_STEADY ||
-                        preferences.appPreferences.debugLogging,
+                navLogEnabled = preferences.appPreferences.debugLogging,
                 modifier = modifier,
             )
             overviewDialog?.let { info ->
@@ -320,7 +315,6 @@ fun HomePageContent(
     },
     onClickViewMore: (RowColumn, HomeRowLoadingState.Success) -> Unit = { _, _ -> },
     showQuickPills: Boolean = false,
-    holdIntervalMs: Long = HoldThrottle.HOLD_ROW_INTERVAL_MS,
     navLogEnabled: Boolean = false,
 ) {
     // Fork (GooseFlix #1421): an optional first row of one-press pills, for accounts that have them
@@ -408,7 +402,7 @@ fun HomePageContent(
         if (focusedPill == null) focusedItem?.let { onUpdateBackdrop.invoke(it) }
     }
     // Fork: a held up/down moves one row at a time at a steady pace, see HoldThrottle
-    val holdThrottle = remember(holdIntervalMs) { HoldThrottle(holdIntervalMs) }
+    val holdThrottle = remember { HoldThrottle() }
     val navLog = remember(navLogEnabled) { HomeNavLog(navLogEnabled) }
     Box(modifier = modifier) {
         Column(

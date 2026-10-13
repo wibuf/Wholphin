@@ -8,7 +8,7 @@ import timber.log.Timber
  *
  * Each up/down key and whether it moved, every row and card that gains or loses focus, and where
  * the list is scrolled, all under the logcat tag [TAG] with milliseconds since the first line. On
- * when "Home hold speed" is set faster than Steady, or verbose logging is on. Capture with
+ * when verbose logging is on. Capture with
  * `adb logcat -s GooseFlixNav`.
  */
 class HomeNavLog(

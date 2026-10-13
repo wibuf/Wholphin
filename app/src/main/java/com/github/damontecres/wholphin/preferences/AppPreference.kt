@@ -229,20 +229,6 @@ sealed interface AppPreference<Pref, T> {
                 summaryOff = R.string.disabled,
             )
 
-        // Fork-only: how fast a held up/down moves on the home page, to reproduce #2034 upstream
-        val HomeHoldSpeedPref =
-            AppChoicePreference<AppPreferences, HomeHoldSpeed>(
-                title = R.string.home_hold_speed,
-                defaultValue = HomeHoldSpeed.HOLD_STEADY,
-                getter = { it.homePagePreferences.homeHoldSpeed },
-                setter = { prefs, value ->
-                    prefs.updateHomePagePreferences { homeHoldSpeed = value }
-                },
-                displayValues = R.array.home_hold_speed_options,
-                indexToValue = { HomeHoldSpeed.forNumber(it) ?: HomeHoldSpeed.HOLD_STEADY },
-                valueToIndex = { if (it != HomeHoldSpeed.UNRECOGNIZED) it.number else 0 },
-            )
-
         // Fork-only (GooseFlix #1501): a single new episode in Recently Added shown as its show
         val RecentlyAddedShowSeries =
             AppSwitchPreference<AppPreferences>(
@@ -1357,7 +1343,7 @@ val advancedPreferences =
 //                    AppPreference.NavDrawerSwitchOnFocus,
                         AppPreference.SlideshowDuration,
                         AppPreference.SlideshowPlayVideos,
-                    ) + listOfNotNull(AppPreference.HomeHoldSpeedPref.takeIf { BuildConfig.GOOSEFLIX }),
+                    ),
             ),
         )
         add(
