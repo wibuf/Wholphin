@@ -28,6 +28,7 @@ import androidx.media3.session.MediaSession
 import coil3.imageLoader
 import coil3.request.ImageRequest
 import coil3.size.Size
+import com.github.damontecres.wholphin.BuildConfig
 import com.github.damontecres.wholphin.R
 import com.github.damontecres.wholphin.data.ItemPlaybackDao
 import com.github.damontecres.wholphin.data.ItemPlaybackRepository
@@ -783,7 +784,10 @@ class PlaybackViewModel
                                             serverRepository.currentServer?.serverVersion,
                                         )
                                     } else {
-                                        mpvDeviceProfile
+                                        mpvDeviceProfile(
+                                            supportsAVCHigh10 =
+                                                !BuildConfig.GOOSEFLIX || deviceProfileService.supportsAVCHigh10,
+                                        )
                                     },
                                 maxAudioChannels = null,
                                 audioStreamIndex = audioIndex,

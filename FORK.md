@@ -92,6 +92,7 @@ Newest first within each area. The numbers are GooseFlix issues unless they say 
 - Playback timeline log (logcat tag `GooseFlixPlay`) for diagnosing start-up problems (`PlaybackTimeline.kt`).
 - Subtitle keyword priorities: prefer "full"/"dialogue" tracks and avoid signs/songs/forced ones, tuned on the anime library.
 - MPV: dialogue boost and loud-scene compression options.
+- MPV leaves 10-bit H.264 (Hi10P) for the server to transcode on devices without a hardware decoder for it, as ExoPlayer already did, instead of direct-playing it in software and stuttering (#1512; `util/mpv/MpvDeviceProfile.kt`).
 - Defaults: OLED black theme, pause with one press of the centre button.
 
 ## Upstream

@@ -7,6 +7,7 @@ import com.github.damontecres.wholphin.preferences.ExperimentalPreferences
 import com.github.damontecres.wholphin.preferences.PlaybackOverrides
 import com.github.damontecres.wholphin.preferences.enabled
 import com.github.damontecres.wholphin.util.WholphinDispatchers
+import com.github.damontecres.wholphin.util.profile.KnownDefects
 import com.github.damontecres.wholphin.util.profile.MediaCodecCapabilitiesTest
 import com.github.damontecres.wholphin.util.profile.createDeviceProfile
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -32,6 +33,14 @@ class DeviceProfileService
             MediaCodecCapabilitiesTest(context)
         }
         private val mutex = Mutex()
+
+        /**
+         * Fork (GooseFlix #1512): whether this device decodes 10-bit H.264 (Hi10P), checked the same
+         * way as for the ExoPlayer profile. Used for the MPV profile.
+         */
+        val supportsAVCHigh10: Boolean by lazy {
+            mediaCodecCapabilitiesTest.supportsAVCHigh10() || KnownDefects.supportsHi10P52
+        }
 
         private var configuration: DeviceProfileConfiguration? = null
         private var deviceProfile: DeviceProfile? = null
