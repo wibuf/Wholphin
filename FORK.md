@@ -10,16 +10,18 @@ App issues there are titled "App: ...".
 
 ## Where the work lives
 
-- **Branch `claude/tender-johnson-wqvwci` is the fork's source of truth.** The fork's `main` is
-  still upstream's code at the point the fork branched (`45c1ceca`). Start new work from this
-  branch, not from `main`.
-- **Every push to a `claude/**` branch** is built by `.github/workflows/fork-build.yml` into a
-  signed release and published as a rolling prerelease named after the branch
-  (`claude-tender-johnson-wqvwci`). Its title carries the version, eg `v1.0.7-113-g9a7fa768`.
-- **Sideloaded TVs** update from Scuffed: Scuffed reads that prerelease (its `fork_tag` setting),
-  installs it on the Shield over ADB, and serves `/update` and `/get` for the app's self-updater
-  and the Downloader install at add.beefmc.com/tv. **A different branch publishes a different
-  tag**, so moving work to a new branch also means pointing Scuffed's `fork_tag` at it.
+- **Branch `gooseflix` is the fork's main branch.** The fork's `main` is still upstream's code
+  (where the fork branched, `45c1ceca`). Sessions work on their own `claude/...` branch, started from
+  `gooseflix`, and ship by merging into it. (Until 2026-10-14 the work lived on a session branch,
+  `claude/tender-johnson-wqvwci`, which `gooseflix` continues.)
+- **Every push to `gooseflix` or a `claude/**` branch** is built by `.github/workflows/fork-build.yml`
+  into a signed release and published as a rolling prerelease named after the branch. The
+  `gooseflix` release title carries the version, eg `v1.0.9-63-g…`.
+- **Sideloaded TVs** update from Scuffed: Scuffed reads the **`gooseflix`** release (its `fork_tag`
+  setting), installs it on the Shield over ADB, and serves `/update` and `/get` for the app's
+  self-updater and the Downloader install at add.beefmc.com/tv. A session branch's release is a
+  test build: point Scuffed at it only to try something on the Shield, and back afterwards, since
+  the same setting feeds every TV.
 - **Google Play** (`bot.grit.gooseflix`): the same release carries `app-appstore-release.aab`.
   Upload it by hand in Play Console (Closed testing → Alpha → Create new release).
 

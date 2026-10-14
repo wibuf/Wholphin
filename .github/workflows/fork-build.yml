@@ -12,6 +12,8 @@ name: Fork branch build
 on:
   push:
     branches:
+      # gooseflix is the fork's main branch: its release (tag "gooseflix") is what Scuffed installs
+      - gooseflix
       - claude/**
   workflow_dispatch:
 
