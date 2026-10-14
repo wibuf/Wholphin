@@ -73,7 +73,10 @@ class UserSwitchListener
                 launchIO {
                     homeSettingsService.loadCurrentSettings(user.id)
                 }
-                if (BuildConfig.DISCOVER_ENABLED) {
+                if (BuildConfig.DISCOVER_ENABLED && GooseFlixSeerr.enabled) {
+                    // Fork: every user gets Seerr through Scuffed, no setup (GooseFlix #1516)
+                    launchIO { GooseFlixSeerr.connect(user, seerrServerRepository, seerrServerDao) }
+                } else if (BuildConfig.DISCOVER_ENABLED) {
                     // Check for seerr server
                     launchIO {
                         seerrServerDao

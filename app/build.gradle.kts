@@ -127,6 +127,11 @@ configure<ApplicationExtension> {
             if (forkBuild) providers.gradleProperty("forkHomeServerUrl").getOrElse("https://jelly.grit.bot") else ""
         buildConfigField("boolean", "GOOSEFLIX", forkBuild.toString())
         buildConfigField("String", "HOME_SERVER_URL", "\"$homeServerUrl\"")
+        // Fork: Scuffed's Seerr proxy, which every user is connected to with no setup (GooseFlix
+        // #1516). Empty turns it off and keeps upstream's add-a-Seerr-server-by-hand.
+        val seerrProxyUrl =
+            if (forkBuild) providers.gradleProperty("forkSeerrProxyUrl").getOrElse("") else ""
+        buildConfigField("String", "SEERR_PROXY_URL", "\"$seerrProxyUrl\"")
     }
 
     signingConfigs {
