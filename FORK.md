@@ -81,7 +81,7 @@ Newest first within each area. The numbers are GooseFlix issues unless they say 
 - Details pages show every genre on one line (upstream stops at four and adds "+N"), and drop "Ends at" from the details line so the ratings fit; the player still shows it (#1451).
 
 ### Requests (Seerr)
-- Every signed-in user is connected to Seerr automatically through Scuffed's proxy, with their Jellyfin token in place of an API key; accounts the proxy blocks (eg `playreview`) get no Seerr, so no Discover (#1516; `services/GooseFlixSeerr.kt`, Scuffed `collector/gooseflix_seerr.py`). Off until `SEERR_PROXY_URL` is set (gradle property `forkSeerrProxyUrl`), which waits on the Scuffed proxy being reviewed and deployed.
+- Every signed-in user is connected to Seerr automatically through Scuffed's proxy, with their Jellyfin token in place of an API key; accounts the proxy blocks (eg `playreview`) get no Seerr, so no Discover (#1516; `services/GooseFlixSeerr.kt`, Scuffed `collector/gooseflix_seerr.py`). `SEERR_PROXY_URL` is `https://add.beefmc.com/api/gooseflix/seerr`; `-PforkSeerrProxyUrl=` (empty) turns it off. The proxy confirms Seerr acts as each user before forwarding anything for them, and refuses if not.
 
 ### Search
 - Titles that exist in more than one library show the library name in place of the year (`ui/search/SearchLibraries.kt`).

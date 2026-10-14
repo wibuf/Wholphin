@@ -128,9 +128,14 @@ configure<ApplicationExtension> {
         buildConfigField("boolean", "GOOSEFLIX", forkBuild.toString())
         buildConfigField("String", "HOME_SERVER_URL", "\"$homeServerUrl\"")
         // Fork: Scuffed's Seerr proxy, which every user is connected to with no setup (GooseFlix
-        // #1516). Empty turns it off and keeps upstream's add-a-Seerr-server-by-hand.
+        // #1516). Set -PforkSeerrProxyUrl= (empty) to turn it off and keep upstream's
+        // add-a-Seerr-server-by-hand.
         val seerrProxyUrl =
-            if (forkBuild) providers.gradleProperty("forkSeerrProxyUrl").getOrElse("") else ""
+            if (forkBuild) {
+                providers.gradleProperty("forkSeerrProxyUrl").getOrElse("https://add.beefmc.com/api/gooseflix/seerr")
+            } else {
+                ""
+            }
         buildConfigField("String", "SEERR_PROXY_URL", "\"$seerrProxyUrl\"")
     }
 
