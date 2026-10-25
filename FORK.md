@@ -79,7 +79,7 @@ Newest first within each area. The numbers are GooseFlix issues unless they say 
 
 ### Ratings and details
 - IMDb, MyAnimeList (anime), Rotten Tomatoes (critics and Popcornmeter) and TMDB ratings from the MDBList Ratings plugin, with provider logos (#1862; `services/MdbListRatingsService.kt`, `ui/components/MdbListRatingsRow.kt`).
-- The server's own critic and community scores are hidden by default.
+- The server's own critic and community scores are hidden by default, but shown whenever MDBList has nothing for an item (not fetched yet, or an empty result). The home page header looks MDBList up for the focused item, like the details page.
 - Details pages show every genre on one line (upstream stops at four and adds "+N"), and drop "Ends at" from the details line so the ratings fit; the player still shows it (#1451).
 
 ### Requests (Seerr)

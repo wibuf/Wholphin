@@ -53,6 +53,7 @@ import androidx.lifecycle.compose.LifecycleStartEffect
 import androidx.lifecycle.lifecycleScope
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import com.github.damontecres.wholphin.BuildConfig
 import com.github.damontecres.wholphin.R
 import com.github.damontecres.wholphin.data.model.BaseItem
 import com.github.damontecres.wholphin.data.model.HomeRowConfig
@@ -718,6 +719,8 @@ fun HomePageHeader(
         showLogo = showLogo,
         logoImageUrl = rememberLogoUrl(item),
         modifier = modifier,
+        // Fork: the header shows one item, so look its MDBList ratings up like the details page
+        ratingsItemId = item?.id?.takeIf { BuildConfig.GOOSEFLIX },
     )
 }
 
@@ -733,6 +736,7 @@ fun HomePageHeader(
     showLogo: Boolean,
     logoImageUrl: String?,
     modifier: Modifier = Modifier,
+    ratingsItemId: UUID? = null,
 ) {
     Column(
         verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -753,7 +757,7 @@ fun HomePageHeader(
             if (subtitle != null) {
                 EpisodeName(subtitle)
             }
-            QuickDetails(quickDetails, timeRemaining, endsAt = endsAt)
+            QuickDetails(quickDetails, timeRemaining, endsAt = endsAt, itemId = ratingsItemId)
             val overviewModifier =
                 Modifier
                     .padding(0.dp)

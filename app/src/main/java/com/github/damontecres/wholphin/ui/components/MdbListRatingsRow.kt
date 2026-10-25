@@ -80,20 +80,35 @@ fun MdbListRatings(
     itemId: UUID?,
     modifier: Modifier = Modifier,
     textStyle: TextStyle = MaterialTheme.typography.titleSmall,
+    /**
+     * Fork (GooseFlix): drawn instead when MDBList ratings are wanted but there are none to show
+     * (no item to look up, the plugin has nothing cached, or only sources that are turned off), so
+     * an item still shows the server's own ratings rather than none
+     */
+    fallback: (@Composable () -> Unit)? = null,
 ) {
     val enabled = LocalInterfaceCustomization.current.enabledDisplayToggles
     val wanted = remember(enabled) { SOURCE_TOGGLES.filter { it.second in enabled } }
-    if (itemId == null || wanted.isEmpty()) {
+    if (wanted.isEmpty()) {
+        return
+    }
+    if (itemId == null) {
+        fallback?.invoke()
         return
     }
     val service = LocalMdbListRatingsService.current
     var ratings by remember(itemId) { mutableStateOf<MdbListRatingsResponse?>(null) }
+    var loaded by remember(itemId) { mutableStateOf(false) }
     LaunchedEffect(itemId) {
         ratings = service.getRatings(itemId)
+        loaded = true
     }
-    val response = ratings ?: return
-    val shown = wanted.mapNotNull { (source, _) -> response.valueFor(source)?.let { source to it } }
-    if (shown.isEmpty()) {
+    // Nothing until the lookup answers, so the fallback doesn't flash up first
+    if (!loaded) return
+    val response = ratings
+    val shown = response?.let { r -> wanted.mapNotNull { (source, _) -> r.valueFor(source)?.let { source to it } } }
+    if (shown.isNullOrEmpty()) {
+        fallback?.invoke()
         return
     }
     shown.forEach { (source, value) ->

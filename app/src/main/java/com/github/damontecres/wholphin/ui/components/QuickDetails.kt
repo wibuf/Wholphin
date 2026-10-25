@@ -62,7 +62,25 @@ fun QuickDetails(
             if (DisplayToggle.CRITIC_RATING in enabled) {
                 QuickDetailsText(details.criticRating, Modifier, textStyle, inlineContentMap)
             }
-            MdbListRatings(itemId, textStyle = textStyle)
+            MdbListRatings(
+                itemId,
+                textStyle = textStyle,
+                // Fork: GooseFlix hides the server's star and critic scores by default because
+                // MDBList's replace them; when MDBList has none for this item, show those after all
+                fallback =
+                    if (BuildConfig.GOOSEFLIX) {
+                        {
+                            if (DisplayToggle.COMMUNITY_RATING !in enabled) {
+                                QuickDetailsText(details.communityRating, Modifier, textStyle, inlineContentMap)
+                            }
+                            if (DisplayToggle.CRITIC_RATING !in enabled) {
+                                QuickDetailsText(details.criticRating, Modifier, textStyle, inlineContentMap)
+                            }
+                        }
+                    } else {
+                        null
+                    },
+            )
         }
         // Fork (GooseFlix #1451): no "Ends at" here, where it pushed the ratings off the end of
         // the line; the player still shows it
