@@ -23,6 +23,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -329,6 +330,10 @@ fun TvGuideGridContent(
     val guideStart = remember(guideTimes) { guideTimes.first() }
 
     val programFocusRequester = remember { FocusRequester() }
+
+    // Fork: the programme that really has focus, which can lag focusedProgramIndex while a move is
+    // landing. The requester above follows focusedProgramIndex only once the guide recomposes.
+    var actualFocusedProgram by remember { mutableIntStateOf(-1) }
     var focusedChannelIndex by rememberInt(-1)
     var focusedItem by rememberPosition(RowColumn(0, 0))
     var focusedProgramIndex by rememberInt(0)
@@ -368,10 +373,20 @@ fun TvGuideGridContent(
                 } else {
                     launch { state.animateToChannel(row + step, Alignment.CenterVertically) }
                 }
-                // The programme may only be laid out once the guide has moved to it
+                // Wait a frame before each try: until the guide recomposes, the requester is still on
+                // the programme being left, and "focusing" that would report success without moving
+                // (the highlight then lagged one press behind the header). And only count it done once
+                // the target itself has focus; it may only be laid out once the guide has moved to it.
                 repeat(GUIDE_FOCUS_ATTEMPTS) {
-                    if (programFocusRequester.tryRequestFocus()) return@launch
                     withFrameNanos { }
+                    if (actualFocusedProgram == index) return@launch
+                    programFocusRequester.tryRequestFocus()
+                }
+                withFrameNanos { }
+                if (actualFocusedProgram != index && actualFocusedProgram >= 0) {
+                    // Never landed: point the header back at what is actually focused
+                    Timber.w("Guide focus didn't reach programme %d, staying on %d", index, actualFocusedProgram)
+                    focusedProgramIndex = actualFocusedProgram
                 }
             } catch (ex: CancellationException) {
                 throw ex
@@ -564,6 +579,7 @@ fun TvGuideGridContent(
                                     val cameFromChannel = focusedChannelIndex >= 0
                                     focusedChannelIndex = -1
                                     focusedProgramIndex = programIndex
+                                    actualFocusedProgram = programIndex
                                     scope.launch {
                                         try {
                                             if (!BuildConfig.GOOSEFLIX || cameFromChannel) {
