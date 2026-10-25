@@ -92,7 +92,7 @@ Newest first within each area. The numbers are GooseFlix issues unless they say 
 - Live TV recovery: a stream that errors or hangs reconnects on its own, and a channel that won't start falls back to the server transcoding it (`LiveTvRetryPolicy.kt`, `LiveTvTranscodeMemory.kt`).
 - Passout protection for live TV: "Still watching?" after a set time with no button pressed, then stop. Steps are 30 minutes, and it can be set for live TV, shows/movies or both (`LiveTvPassout.kt`).
 - Guide: any programme's channel can be watched, whatever time the programme is.
-- Guide moves like a cable box: up/down go to what's on at the time you're looking at and only scroll vertically; left/right set that time and only scroll sideways (`ui/detail/livetv/GuideFocus.kt`).
+- Guide moves like a cable box: up/down go to what's on at the time you're looking at and only scroll vertically; left/right set that time and only scroll sideways (`ui/detail/livetv/GuideFocus.kt`). A move only finishes once the target programme really has focus, so the highlight and the header at the top never disagree.
 - Debug overlay: stall counter, buffer ahead, distance behind live, reconnects (`StallTracker.kt`).
 - Playback timeline log (logcat tag `GooseFlixPlay`) for diagnosing start-up problems (`PlaybackTimeline.kt`).
 - Subtitle keyword priorities: prefer "full"/"dialogue" tracks and avoid signs/songs/forced ones, tuned on the anime library.
