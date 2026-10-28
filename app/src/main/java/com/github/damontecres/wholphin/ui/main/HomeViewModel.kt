@@ -3,6 +3,7 @@ package com.github.damontecres.wholphin.ui.main
 import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.github.damontecres.wholphin.BuildConfig
 import com.github.damontecres.wholphin.data.ServerRepository
 import com.github.damontecres.wholphin.data.model.BaseItem
 import com.github.damontecres.wholphin.data.model.HomeRowConfig
@@ -225,7 +226,9 @@ class HomeViewModel
                             }
                         }
 
-                if (refresh) {
+                // Fork: the first load fills rows in as they finish too, showing the page as soon as
+                // the top row is ready instead of waiting for every row (slow with many libraries)
+                if (refresh || BuildConfig.GOOSEFLIX) {
                     // Replace rows as they complete
                     val remaining = deferred.withIndex().toMutableList()
                     while (remaining.isNotEmpty()) {
@@ -246,6 +249,12 @@ class HomeViewModel
                                 }
                             state.copy(
                                 homeRows = newRows,
+                                loadingState =
+                                    if (HomeFirstLoad.showPage(state.loadingState, newRows)) {
+                                        LoadingState.Success
+                                    } else {
+                                        state.loadingState
+                                    },
                             )
                         }
                     }

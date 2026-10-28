@@ -68,6 +68,7 @@ Newest first within each area. The numbers are GooseFlix issues unless they say 
 - Live game pills for the Patriots, Celtics, Bruins and Red Sox, first in the pill row while a game or its pregame is on. They come from Scuffed's `/api/gooseflix/live` (#1427, #1422).
 - Rows for libraries added after the user saved their home settings, placed in library order (`services/NewHomeRows.kt`).
 - Recently Added shows a single new episode as its show (card, header and click), with a "New episode · S1 E2 · Name" line in the header. Setting: Interface → "Show the series for new episodes", on by default (#1501; `services/NewEpisodeSeries.kt`).
+- First load shows the page as soon as the top row is ready; the rows below show as loading and fill in as each finishes (upstream waits for every row) (`ui/main/HomeFirstLoad.kt`).
 - Defaults: Continue Watching and Next Up as separate rows, no Watch Live row, 50 items per row.
 - Holding up or down on the home page moves one row every 75 ms, the fastest the Shield held without focus getting stuck; every repeat (no limit) gets stuck (`ui/main/HoldThrottle.kt`; upstream damontecres/Wholphin#2034). With verbose logging on, the `GooseFlixNav` logcat tag logs each key, row/card focus change and the list's scroll position (`ui/main/HomeNavLog.kt`).
 - The previous user's rows are cleared when switching user.
