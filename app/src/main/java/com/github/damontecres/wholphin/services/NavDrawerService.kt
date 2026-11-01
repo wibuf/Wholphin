@@ -1,6 +1,7 @@
 package com.github.damontecres.wholphin.services
 
 import android.content.Context
+import com.github.damontecres.wholphin.BuildConfig
 import com.github.damontecres.wholphin.data.ServerPreferencesDao
 import com.github.damontecres.wholphin.data.ServerRepository
 import com.github.damontecres.wholphin.data.model.JellyfinUser
@@ -200,14 +201,16 @@ class NavDrawerService
             userDto: ServerUserConfig,
             discoverActive: Boolean,
         ) {
+            // Only servers running the Moonbase plugin with a games library answer here
+            val games =
+                withTimeoutOrNull(5.seconds) { moonbaseGamesService.libraries(refresh = true) }
+                    ?.firstOrNull()
+                    ?.let { NavDrawerItem.Games(it.id, it.name) }
             val builtins =
                 buildList {
                     add(NavDrawerItem.Favorites)
                     if (discoverActive) add(NavDrawerItem.Discover)
-                    // Only servers running the Moonbase plugin with a games library answer here
-                    withTimeoutOrNull(5.seconds) { moonbaseGamesService.libraries(refresh = true) }
-                        ?.firstOrNull()
-                        ?.let { add(NavDrawerItem.Games(it.id, it.name)) }
+                    if (!BuildConfig.GOOSEFLIX) games?.let { add(it) }
                 }
             val allLibraries = getAllUserLibraries(user.id, userDto.tvAccess)
             val libraries =
@@ -230,7 +233,9 @@ class NavDrawerService
                             type = it.collectionType,
                         )
                     }
-            val allItems = builtins + libraries
+            // Fork-only: Video Games goes below the libraries, whose order comes from each user's
+            // Jellyfin settings (Scuffed gives everyone the default order once)
+            val allItems = builtins + libraries + listOfNotNull(games.takeIf { BuildConfig.GOOSEFLIX })
 
             val navDrawerPins =
                 withContext(WholphinDispatchers.IO) {
