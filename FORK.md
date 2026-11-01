@@ -73,6 +73,10 @@ Newest first within each area. The numbers are GooseFlix issues unless they say 
 - Holding up or down on the home page moves one row every 75 ms, the fastest the Shield held without focus getting stuck; every repeat (no limit) gets stuck (`ui/main/HoldThrottle.kt`; upstream damontecres/Wholphin#2034). With verbose logging on, the `GooseFlixNav` logcat tag logs each key, row/card focus change and the list's scroll position (`ui/main/HomeNavLog.kt`).
 - The previous user's rows are cleared when switching user.
 
+### Navigation drawer
+- Order: Favorites, Discover, then the libraries, then Video Games last (upstream puts Games third). The libraries' order is each user's Jellyfin library order, which Scuffed sets to the default once per user (Live TV, Movies, TV, the seasonal library, 4K, Cams, the streaming libraries A–Z, Anime, Kids, Reality, Sports, Youtube, Recordings, Playlists, Review) and then leaves alone. The list is `LIBRARY_ORDER` in Scuffed's `collector/library_order.py`. A user's own reordering, in the app or in Jellyfin, wins (`services/NavDrawerService.kt`).
+- Who sees which library (Anime (Streaming) only for sti, Review only for the Play review account) is Jellyfin library access, not the app.
+
 ### Video games
 - Native retro game playback from the Moonbase Jellyfin plugin: libretro host in `app/src/main/cpp`, games UI in `games/`.
 - Controllers mapped per port; artwork fetched through a retrying disk cache; a home row and header for each games library.
