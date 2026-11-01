@@ -20,8 +20,9 @@ App issues there are titled "App: ...".
 - **Sideloaded TVs** update from Scuffed: Scuffed reads the **`gooseflix`** release (its `fork_tag`
   setting), installs it on the Shield over ADB, and serves `/update` and `/get` for the app's
   self-updater and the Downloader install at add.beefmc.com/tv. A session branch's release is a
-  test build: point Scuffed at it only to try something on the Shield, and back afterwards, since
-  the same setting feeds every TV.
+  test build: point Scuffed at it to try it on the Shield. Only the `gooseflix` release is
+  published to friends' TVs on its own (Scuffed `collector/wholphin_feed.py`, since 2026-11-01),
+  so a test build stays on the Shield; point Scuffed back at `gooseflix` once it ships.
 - **Google Play** (`bot.grit.gooseflix`): the same release carries `app-appstore-release.aab`.
   Upload it by hand in Play Console (Closed testing → Alpha → Create new release).
 
