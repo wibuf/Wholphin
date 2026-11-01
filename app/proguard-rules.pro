@@ -24,3 +24,6 @@
 -keep class androidx.media3.ui.SubtitlePainter {
   private final float outlineWidth;
 }
+
+# Keep external/native functions
+-keep class com.suyashbelekar.exoplayerhdrutils.libdovi.LibDovi { *; }

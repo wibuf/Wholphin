@@ -6,6 +6,7 @@ import android.os.Build
 import android.os.SystemClock
 import android.widget.Toast
 import androidx.annotation.OptIn
+import androidx.annotation.VisibleForTesting
 import androidx.compose.ui.unit.Density
 import androidx.core.net.toUri
 import androidx.lifecycle.ViewModel
@@ -37,6 +38,7 @@ import com.github.damontecres.wholphin.data.model.BaseItem
 import com.github.damontecres.wholphin.data.model.Chapter
 import com.github.damontecres.wholphin.data.model.Playlist
 import com.github.damontecres.wholphin.data.model.PlaylistItem
+import com.github.damontecres.wholphin.data.model.SeriesTrackChoiceType
 import com.github.damontecres.wholphin.data.model.TrackIndex
 import com.github.damontecres.wholphin.mpv.MpvPlayer
 import com.github.damontecres.wholphin.preferences.AppPreference
@@ -214,7 +216,7 @@ class PlaybackViewModel
 
         val currentUserDto = serverRepository.currentUserDtoFlow
 
-        // Exposed for testing
+        @VisibleForTesting
         val initJob: Job
 
         init {
@@ -389,8 +391,16 @@ class PlaybackViewModel
          */
         private suspend fun init() {
             musicService.stop()
-            _state.update { it.copy(nextUp = null) }
             this.preferences = userPreferencesService.getCurrent()
+            val maxBitrate =
+                preferences.appPreferences.playbackPreferences.maxBitrate
+                    .takeIf { it > 0 } ?: AppPreference.DEFAULT_BITRATE
+            _state.update {
+                it.copy(
+                    nextUp = null,
+                    maxBitrate = maxBitrate,
+                )
+            }
             if (preferences.appPreferences.playbackPreferences.refreshRateSwitching) {
                 addCloseable { refreshRateService.resetRefreshRate() }
             }
@@ -605,7 +615,16 @@ class PlaybackViewModel
                         null
                     }
 
-                val plc = streamChoiceService.getPlaybackLanguageChoice(base)
+                val audioStc =
+                    streamChoiceService.getSeriesTrackChoices(
+                        base,
+                        SeriesTrackChoiceType.AUDIO,
+                    )
+                val subtitleStc =
+                    streamChoiceService.getSeriesTrackChoices(
+                        base,
+                        SeriesTrackChoiceType.AUDIO,
+                    )
 
                 if (mediaSource == null && !isLiveTv) {
                     showToast(
@@ -634,30 +653,31 @@ class PlaybackViewModel
 
                 val subtitleStreams = mediaSource?.let { getSubtitleStreams(mediaSource) }.orEmpty()
                 val audioStreams = mediaSource?.let { getAudioStreams(mediaSource) }.orEmpty()
-                val audioStream =
+                val audioResult =
                     mediaSource?.let {
                         streamChoiceService
                             .chooseAudioStream(
                                 source = mediaSource,
-                                seriesId = base.seriesId,
+                                item = base,
                                 itemPlayback = itemPlayback,
-                                plc = plc,
+                                stc = audioStc,
                                 prefs = preferences,
                             )
                     }
-                val audioIndex = audioStream?.index
+                val audioIndex = audioResult?.stream?.index
 
                 val subtitleIndex =
                     mediaSource?.let {
                         streamChoiceService
                             .chooseSubtitleStream(
+                                item = base,
                                 source = mediaSource,
-                                audioStream = audioStream,
-                                seriesId = base.seriesId,
+                                audioStream = audioResult?.stream,
                                 itemPlayback = itemPlayback,
-                                plc = plc,
+                                stc = subtitleStc,
                                 prefs = preferences,
-                            )?.index
+                            )?.stream
+                            ?.index
                     }
                 Timber.d(
                     "Selected mediaSource=%s, audioIndex=%s, subtitleIndex=%s",
@@ -732,6 +752,7 @@ class PlaybackViewModel
             positionMs: Long = 0,
             enableDirectPlay: Boolean = !this.forceTranscoding,
             enableDirectStream: Boolean = !this.forceTranscoding,
+            maxBitrate: Long = this.state.value.maxBitrate,
         ): Unit =
             withContext(WholphinDispatchers.IO) {
                 val itemId = item.id
@@ -742,7 +763,8 @@ class PlaybackViewModel
                 state.value.currentPlayback?.let { currentPlayback ->
                     if (currentPlayback.item.id == item.id &&
                         currentPlayback.playMethod == PlayMethod.DIRECT_PLAY &&
-                        enableDirectPlay
+                        enableDirectPlay &&
+                        state.value.maxBitrate == maxBitrate
                     ) {
                         val wasSuccessful =
                             changeStreamsDirectPlay(
@@ -755,22 +777,21 @@ class PlaybackViewModel
                 }
 
                 Timber.i(
-                    "changeStreams (%s): audioIndex=%s, subtitleIndex=%s, enableDirectPlay=%s, enableDirectStream=%s, positionMs=%s",
+                    "changeStreams (%s): audioIndex=%s, subtitleIndex=%s, enableDirectPlay=%s, enableDirectStream=%s, positionMs=%s, maxBitrate=%s",
                     itemId,
                     audioIndex,
                     subtitleIndex,
                     enableDirectPlay,
                     enableDirectStream,
                     positionMs,
+                    maxBitrate,
                 )
                 timeline.mark(
                     "requesting playback info: audioIndex=$audioIndex subtitleIndex=$subtitleIndex " +
                         "directPlay=$enableDirectPlay directStream=$enableDirectStream position=${positionMs}ms",
                 )
+                _state.update { it.copy(maxBitrate = maxBitrate) }
 
-                val maxBitrate =
-                    preferences.appPreferences.playbackPreferences.maxBitrate
-                        .takeIf { it > 0 } ?: AppPreference.DEFAULT_BITRATE
                 val response by
                     api.mediaInfoApi
                         .getPostedPlaybackInfo(
@@ -1098,7 +1119,7 @@ class PlaybackViewModel
                         streamChoiceService.resolveSubtitleIndex(
                             source = currentPlayback.mediaSourceInfo,
                             audioStreamIndex = index,
-                            seriesId = currentItem.item.data.seriesId,
+                            item = currentItem.item.data,
                             subtitleIndex = currentPlayback.subtitleIndex,
                             prefs = preferences,
                         )
@@ -1134,7 +1155,7 @@ class PlaybackViewModel
                         streamChoiceService.resolveSubtitleIndex(
                             source = currentPlayback.mediaSourceInfo,
                             audioStreamIndex = currentPlayback.audioIndex,
-                            seriesId = currentItem.item.data.seriesId,
+                            item = currentItem.item.data,
                             subtitleIndex = index,
                             prefs = preferences,
                         )
@@ -1151,6 +1172,26 @@ class PlaybackViewModel
                     Timber.w("Trying to change subtitle, but currentPlayback is null")
                 }
             }
+
+        fun changeMaxBitrate(newMaxBitrate: Long) {
+            viewModelScope.launchIO {
+                val currentPlayback = state.value.currentPlayback
+                if (currentPlayback != null) {
+                    Timber.d("Changing bitrate to %s", newMaxBitrate)
+                    changeStreams(
+                        item = currentItem.item,
+                        sourceId = currentPlayback.mediaSourceInfo.id,
+                        audioIndex = currentPlayback.audioIndex,
+                        subtitleIndex = currentPlayback.subtitleIndex,
+                        positionMs = onMain { player.currentPosition },
+                        enableDirectPlay = true,
+                        maxBitrate = newMaxBitrate,
+                    )
+                } else {
+                    Timber.w("Trying to change bitrate, but currentPlayback is null")
+                }
+            }
+        }
 
         internal suspend fun saveTrackSelection(
             trackIndex: Int,
@@ -1269,7 +1310,7 @@ class PlaybackViewModel
         }
 
         // Variables for tracking segment state
-        // Exposed for testing
+        @VisibleForTesting
         internal var segmentJob: Job? = null
         private val autoSkippedSegments = mutableSetOf<UUID>()
         private val outroShownSegments = mutableSetOf<UUID>()

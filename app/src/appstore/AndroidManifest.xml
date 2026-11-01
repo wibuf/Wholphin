@@ -5,5 +5,8 @@
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" tools:node="remove" />
     <!-- Fork: the self-updater's silent installs; app store builds are updated by the store -->
     <uses-permission android:name="android.permission.UPDATE_PACKAGES_WITHOUT_USER_ACTION" tools:node="remove" />
+    <uses-permission
+        android:name="com.amazon.permission.media.session.voicecommandcontrol"
+        tools:node="remove" />
 
 </manifest>

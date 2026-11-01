@@ -12,6 +12,7 @@ import com.github.damontecres.wholphin.preferences.AppPreferences
 import com.github.damontecres.wholphin.services.BackdropService
 import com.github.damontecres.wholphin.services.DatePlayedService
 import com.github.damontecres.wholphin.services.FavoriteWatchManager
+import com.github.damontecres.wholphin.services.HomeDataService
 import com.github.damontecres.wholphin.services.HomePageResolvedSettings
 import com.github.damontecres.wholphin.services.HomeSettingsService
 import com.github.damontecres.wholphin.services.LatestNextUpService
@@ -63,6 +64,7 @@ class HomeViewModel
         val serverReportService: ServerReportService,
         private val navDrawerService: NavDrawerService,
         private val homeSettingsService: HomeSettingsService,
+        private val homeDataService: HomeDataService,
         private val favoriteWatchManager: FavoriteWatchManager,
         private val datePlayedService: DatePlayedService,
         private val backdropService: BackdropService,
@@ -187,7 +189,7 @@ class HomeViewModel
                                 semaphore.withPermit {
                                     Timber.v("Fetching row: %s", row)
                                     try {
-                                        homeSettingsService.fetchDataForRow(
+                                        homeDataService.fetchDataForRow(
                                             row = row.config,
                                             scope = viewModelScope,
                                             prefs = prefs,

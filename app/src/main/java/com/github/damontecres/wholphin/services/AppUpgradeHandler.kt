@@ -7,15 +7,22 @@ import androidx.core.content.edit
 import androidx.datastore.core.DataStore
 import androidx.preference.PreferenceManager
 import com.github.damontecres.wholphin.BuildConfig
+import com.github.damontecres.wholphin.data.CurrentUser
 import com.github.damontecres.wholphin.data.JellyfinServerDao
+import com.github.damontecres.wholphin.data.MostRecentServer
+import com.github.damontecres.wholphin.data.MostRecentServerProvider
+import com.github.damontecres.wholphin.data.PlaybackLanguageChoiceDao
 import com.github.damontecres.wholphin.data.RememberedTabDao
 import com.github.damontecres.wholphin.data.SeerrServerDao
+import com.github.damontecres.wholphin.data.SeriesTrackChoiceDao
 import com.github.damontecres.wholphin.data.model.JellyfinUser
 import com.github.damontecres.wholphin.data.model.RememberedTab
+import com.github.damontecres.wholphin.data.model.SeriesTrackChoice
 import com.github.damontecres.wholphin.preferences.AppPreference
 import com.github.damontecres.wholphin.preferences.AppPreferences
 import com.github.damontecres.wholphin.preferences.DisplayToggle
 import com.github.damontecres.wholphin.preferences.ExperimentalPreference
+import com.github.damontecres.wholphin.preferences.HdrOverrideMode
 import com.github.damontecres.wholphin.preferences.ScreensaverPreference
 import com.github.damontecres.wholphin.preferences.update
 import com.github.damontecres.wholphin.preferences.updateAdvancedPreferences
@@ -38,6 +45,7 @@ import com.github.damontecres.wholphin.ui.setup.seerr.migrateSeerrUrl
 import com.github.damontecres.wholphin.util.Version
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.firstOrNull
 import org.jellyfin.sdk.model.api.BaseItemKind
 import org.jellyfin.sdk.model.serializer.toUUIDOrNull
 import timber.log.Timber
@@ -58,6 +66,9 @@ class AppUpgradeHandler
         private val seerrServerDao: SeerrServerDao,
         private val serverDao: JellyfinServerDao,
         private val rememberedTabDao: RememberedTabDao,
+        private val mostRecentServerProvider: MostRecentServerProvider,
+        private val playbackLanguageChoiceDao: PlaybackLanguageChoiceDao,
+        private val seriesTrackChoiceDao: SeriesTrackChoiceDao,
     ) {
         val pkgInfo: PackageInfo get() = context.packageManager.getPackageInfo(context.packageName, 0)
         val currentVersion: Version get() = Version.fromString(pkgInfo.versionName!!)
@@ -441,6 +452,65 @@ class AppUpgradeHandler
                         }
                     } else {
                         it
+                    }
+                }
+            }
+
+            // Fork: upstream gates this on the NEW version being 1.0.8 or older, which a 1.0.9-N fork
+            // build never is, so every TV would lose its sign-in on the update. Run it whenever the
+            // new store is still empty instead; it clears the old ids, so it only ever runs once.
+            if (current.isEqualOrBefore(Version.fromString("1.0.8-0-g0")) ||
+                (BuildConfig.GOOSEFLIX && mostRecentServerProvider.get() == MostRecentServer.None)
+            ) {
+                try {
+                    val prefs = appPreferences.data.firstOrNull()
+                    val serverId = prefs?.currentServerId?.toUUIDOrNull()
+                    val userId = prefs?.currentUserId?.toUUIDOrNull()
+                    if (serverId != null && userId != null) {
+                        val server = serverDao.getServer(serverId)
+                        val user = server?.users?.firstOrNull { it.id == userId }
+                        if (server != null && user != null) {
+                            Timber.i("Migrating most recent server")
+                            mostRecentServerProvider.save(CurrentUser(server.server, user))
+                        }
+                    }
+                } catch (ex: Exception) {
+                    Timber.e(ex, "Error during migration for most recent server")
+                }
+                appPreferences.updateData {
+                    it.update {
+                        currentServerId = ""
+                        currentUserId = ""
+                    }
+                }
+            }
+
+            if (previous.isEqualOrBefore(Version.fromString("1.0.10"))) {
+                // directPlayDolbyVisionEL was replaced by doviProfile7Override; carry the setting forward
+                appPreferences.updateData {
+                    if (it.playbackPreferences.overrides.directPlayDolbyVisionEL) {
+                        it.updatePlaybackOverrides {
+                            doviProfile7Override = HdrOverrideMode.HDR_OVERRIDE_ENABLE
+                            directPlayDolbyVisionEL = false
+                        }
+                    } else {
+                        it
+                    }
+                }
+            }
+
+            if (previous.isLessThan(Version.fromString("1.0.10-0-g0"))) {
+                val count = seriesTrackChoiceDao.count()
+                if (count == 0) {
+                    var offset = 0
+                    while (true) {
+                        val plcs = playbackLanguageChoiceDao.getAll(100, offset)
+                        if (plcs.isEmpty()) break
+                        offset += plcs.size
+
+                        val stcs = plcs.flatMap(SeriesTrackChoice::from)
+                        Timber.i("Migrating %s PLC to %s STC", plcs.size, stcs.size)
+                        seriesTrackChoiceDao.save(stcs)
                     }
                 }
             }
