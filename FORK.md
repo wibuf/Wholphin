@@ -107,6 +107,8 @@ Newest first within each area. The numbers are GooseFlix issues unless they say 
 
 ## Upstream
 
-- Synced with upstream **v1.0.9** on 2026-10-12, a merge on the sync branch. The fork first grew from `45c1ceca`, just after v1.0.7. To sync again: fetch upstream's tags, merge the release tag into a `claude/...` branch, resolve conflicts (keep fork behaviour, take upstream's structure), run the tests, and install that branch's build on a Shield before merging it into the working branch.
+- Synced with upstream **main at `38bd690c`** (31 commits after v1.0.9, before its v1.1.0 tag) on 2026-11-01, and with **v1.0.9** on 2026-10-12, each a merge on a sync branch.
+- Upstream's server plugin (damontecres/Wholphin #1384, #2134) isn't installed on jelly.grit.bot, so its home settings and Seerr auto-configuration stay idle. If it ever is installed, the Scuffed Seerr proxy still wins: `UserSwitchListener` connects through it before the plugin's Seerr step.
+- Upstream's session-restore change (#1905) moved the remembered server/user to a new store, with a migration gated on the new version being 1.0.8 or older. A fork build is 1.0.9-N, so the fork also runs that migration whenever the new store is empty (`AppUpgradeHandler`); without it every TV would be signed out by the update. The fork first grew from `45c1ceca`, just after v1.0.7. To sync again: fetch upstream's tags, merge the release tag into a `claude/...` branch, resolve conflicts (keep fork behaviour, take upstream's structure), run the tests, and install that branch's build on a Shield before merging it into the working branch.
 - Version codes count fork commits since `v1.0.7` (`FORK_BASE_TAG` in `app/build.gradle.kts`), not since the latest tag. Merging a new upstream tag resets the latter, and Android refuses to install a lower code.
 - Issues we've filed upstream: damontecres/Wholphin#2034 (home page focus stuck), fixed here.
