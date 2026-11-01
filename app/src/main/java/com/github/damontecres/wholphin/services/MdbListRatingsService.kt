@@ -1,5 +1,6 @@
 package com.github.damontecres.wholphin.services
 
+import android.os.SystemClock
 import com.github.damontecres.wholphin.data.model.MdbListRatingsResponse
 import com.github.damontecres.wholphin.data.model.MdbListSource
 import kotlinx.serialization.json.Json
@@ -31,9 +32,16 @@ class MdbListRatingsService
 
         // One request per opened item, so revisiting a page does not re-hit the server. Bounded
         // because a long browsing session would otherwise hold every item ever opened.
+        // Fork: entries expire. The app can run for days and the plugin refreshes daily, so an item
+        // looked up before its ratings were fetched stayed blank until the app restarted.
+        private class Entry(
+            val response: MdbListRatingsResponse?,
+            val at: Long,
+        )
+
         private val cache =
-            object : LinkedHashMap<UUID, MdbListRatingsResponse?>(0, 0.75f, true) {
-                override fun removeEldestEntry(eldest: Map.Entry<UUID, MdbListRatingsResponse?>) = size > CACHE_SIZE
+            object : LinkedHashMap<UUID, Entry>(0, 0.75f, true) {
+                override fun removeEldestEntry(eldest: Map.Entry<UUID, Entry>) = size > CACHE_SIZE
             }
 
         /**
@@ -41,13 +49,15 @@ class MdbListRatingsService
          * the request fails for any reason
          */
         suspend fun getRatings(itemId: UUID): MdbListRatingsResponse? {
+            val now = SystemClock.elapsedRealtime()
             synchronized(cache) {
-                if (cache.containsKey(itemId)) {
-                    return cache[itemId]
+                cache[itemId]?.let { entry ->
+                    val ttl = if (entry.response == null) EMPTY_TTL_MS else FOUND_TTL_MS
+                    if (now - entry.at < ttl) return entry.response
                 }
             }
             val result = fetch(itemId)
-            synchronized(cache) { cache[itemId] = result }
+            synchronized(cache) { cache[itemId] = Entry(result, now) }
             return result
         }
 
@@ -131,6 +141,12 @@ class MdbListRatingsService
         companion object {
             private const val PATH = "/Plugins/MdbListRatings/CachedByItemId"
             private const val CACHE_SIZE = 200
+
+            /** Ratings found are kept for a few hours: the plugin refreshes them daily */
+            private const val FOUND_TTL_MS = 6 * 60 * 60 * 1000L
+
+            /** Nothing found is asked again soon: the plugin may fetch it at any time */
+            private const val EMPTY_TTL_MS = 10 * 60 * 1000L
 
             /** Rotten Tomatoes calls 60% and above fresh, for both critics and audience */
             const val FRESH_THRESHOLD = 60.0

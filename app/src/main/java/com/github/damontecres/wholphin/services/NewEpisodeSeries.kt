@@ -19,15 +19,21 @@ import java.util.concurrent.ConcurrentHashMap
  * click all behave as the show) and the header adds a line saying which episode is new.
  */
 object NewEpisodeSeries {
-    /** Series id -> "S1E2 · Episode name" for shows standing in for a new episode */
-    private val labels = ConcurrentHashMap<UUID, String>()
+    /** What's new about a show standing in for a new episode ("S1 E2 · Name") or season ("Season 2") */
+    data class NewLabel(
+        val text: String,
+        val season: Boolean,
+    )
+
+    /** Series id -> what's new, for shows standing in for a new episode or season */
+    private val labels = ConcurrentHashMap<UUID, NewLabel>()
 
     fun enabled(prefs: HomePagePreferences): Boolean = BuildConfig.GOOSEFLIX && !prefs.recentlyAddedEpisodeDetails
 
-    /** Series ids to fetch for [items]: those of the episodes in it */
+    /** Series ids to fetch for [items]: those of the episodes and seasons in it */
     fun seriesIds(items: List<BaseItemDto>): List<UUID> =
         items
-            .filter { it.type == BaseItemKind.EPISODE }
+            .filter { it.type == BaseItemKind.EPISODE || it.type == BaseItemKind.SEASON }
             .mapNotNull { it.seriesId }
             .distinct()
 
@@ -41,10 +47,16 @@ object NewEpisodeSeries {
     ): List<BaseItemDto> =
         items.map { dto ->
             when (dto.type) {
-                BaseItemKind.EPISODE -> {
+                // A season comes back when several of its episodes are new, eg a whole new season
+                BaseItemKind.EPISODE, BaseItemKind.SEASON -> {
                     val show = dto.seriesId?.let { series[it] }
                     if (show != null) {
-                        labels[show.id] = episodeLabel(dto)
+                        labels[show.id] =
+                            if (dto.type == BaseItemKind.SEASON) {
+                                NewLabel(dto.name ?: "", season = true)
+                            } else {
+                                NewLabel(episodeLabel(dto), season = false)
+                            }
                         show
                     } else {
                         dto
@@ -64,10 +76,10 @@ object NewEpisodeSeries {
 
     fun episodeLabel(episode: BaseItemDto): String = listOf(episode.seasonEpisode, episode.name).joinNotBlank(" · ") ?: ""
 
-    /** The episode line for a show standing in for a new episode, eg "S1E2 · The Beef", or null */
-    fun label(item: BaseItem?): String? =
+    /** What's new for a show standing in for a new episode or season, or null */
+    fun label(item: BaseItem?): NewLabel? =
         item
             ?.takeIf { BuildConfig.GOOSEFLIX && it.type == BaseItemKind.SERIES }
             ?.let { labels[it.id] }
-            ?.takeIf { it.isNotBlank() }
+            ?.takeIf { it.text.isNotBlank() }
 }

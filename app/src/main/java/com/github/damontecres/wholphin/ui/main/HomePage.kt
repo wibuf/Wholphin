@@ -311,7 +311,10 @@ fun HomePageContent(
             item = focusedItem,
             showLogo = showLogo,
             modifier = HeaderUtils.modifier,
-            newEpisode = NewEpisodeSeries.label(focusedItem),
+            newEpisode =
+                NewEpisodeSeries.label(focusedItem)?.let {
+                    stringResource(if (it.season) R.string.new_season_line else R.string.new_episode_line, it.text)
+                },
         )
     },
     onClickViewMore: (RowColumn, HomeRowLoadingState.Success) -> Unit = { _, _ -> },
@@ -710,7 +713,7 @@ fun HomePageHeader(
     HomePageHeader(
         title = title,
         // Fork: a show standing in for a new episode says which one, see NewEpisodeSeries
-        subtitle = subtitle ?: newEpisode?.let { stringResource(R.string.new_episode_line, it) },
+        subtitle = subtitle ?: newEpisode,
         overview = item?.data?.overview,
         overviewTwoLines = isEpisode,
         quickDetails = item?.ui?.quickDetails,

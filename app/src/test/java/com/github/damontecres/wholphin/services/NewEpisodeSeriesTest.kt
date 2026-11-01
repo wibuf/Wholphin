@@ -30,7 +30,7 @@ class NewEpisodeSeriesTest {
         assumeTrue(BuildConfig.GOOSEFLIX)
         val out = NewEpisodeSeries.swap(listOf(movie, episode), mapOf(showId to show))
         assertEquals(listOf(movie.id, showId), out.map { it.id })
-        assertEquals("S1 E2 · The Beef", NewEpisodeSeries.label(BaseItem(show)))
+        assertEquals(NewEpisodeSeries.NewLabel("S1 E2 · The Beef", season = false), NewEpisodeSeries.label(BaseItem(show)))
         assertNull(NewEpisodeSeries.label(BaseItem(movie)))
     }
 
@@ -46,6 +46,16 @@ class NewEpisodeSeriesTest {
         NewEpisodeSeries.swap(listOf(episode), mapOf(showId to show))
         NewEpisodeSeries.swap(listOf(show), emptyMap())
         assertNull(NewEpisodeSeries.label(BaseItem(show)))
+    }
+
+    @Test
+    fun aNewSeasonBecomesItsShowToo() {
+        assumeTrue(BuildConfig.GOOSEFLIX)
+        val season = BaseItemDto(id = UUID.randomUUID(), type = BaseItemKind.SEASON, name = "Season 2", seriesId = showId)
+        val out = NewEpisodeSeries.swap(listOf(season), mapOf(showId to show))
+        assertEquals(listOf(showId), out.map { it.id })
+        assertEquals(NewEpisodeSeries.NewLabel("Season 2", season = true), NewEpisodeSeries.label(BaseItem(show)))
+        assertEquals(listOf(showId), NewEpisodeSeries.seriesIds(listOf(season)))
     }
 
     @Test
