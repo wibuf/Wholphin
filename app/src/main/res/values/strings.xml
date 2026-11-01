@@ -176,6 +176,7 @@
     <string name="videos">Videos</string>
     <string name="watch_live">Watch live</string>
     <string name="watch_channel">Watch channel</string>
+    <string name="nav_drawer_reset_order">Reset to default order</string>
     <plurals name="years_old">
         <item quantity="zero">%1$d years old</item>
         <item quantity="one">%1$d year old</item>

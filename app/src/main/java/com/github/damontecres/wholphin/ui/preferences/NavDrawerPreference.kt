@@ -38,6 +38,7 @@ import androidx.tv.material3.ListItem
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Switch
 import androidx.tv.material3.Text
+import com.github.damontecres.wholphin.BuildConfig
 import com.github.damontecres.wholphin.R
 import com.github.damontecres.wholphin.data.ServerPreferencesDao
 import com.github.damontecres.wholphin.data.ServerRepository
@@ -51,6 +52,7 @@ import com.github.damontecres.wholphin.ui.FontAwesome
 import com.github.damontecres.wholphin.ui.PreviewTvSpec
 import com.github.damontecres.wholphin.ui.components.BasicDialog
 import com.github.damontecres.wholphin.ui.components.Button
+import com.github.damontecres.wholphin.ui.components.TextButton
 import com.github.damontecres.wholphin.ui.launchDefault
 import com.github.damontecres.wholphin.ui.launchIO
 import com.github.damontecres.wholphin.ui.main.settings.MoveDirection
@@ -60,6 +62,7 @@ import com.github.damontecres.wholphin.util.ExceptionHandler
 import com.github.damontecres.wholphin.util.WholphinDispatchers
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.update
@@ -140,6 +143,16 @@ fun NavDrawerPreference(
             onMoveDown = { index ->
                 viewModel.update(items.move(MoveDirection.DOWN, index))
             },
+            onReset =
+                if (BuildConfig.GOOSEFLIX) {
+                    {
+                        // Closes without the save on dismiss, which would pin every position again
+                        viewModel.resetOrder()
+                        showDialog = false
+                    }
+                } else {
+                    null
+                },
         )
     }
 }
@@ -151,6 +164,7 @@ fun NavDrawerPreferenceDialog(
     onClick: (Int) -> Unit,
     onMoveUp: (Int) -> Unit,
     onMoveDown: (Int) -> Unit,
+    onReset: (() -> Unit)? = null,
 ) {
     val scope = rememberCoroutineScope()
     val bringIntoViewRequesters = remember { List(items.size) { BringIntoViewRequester() } }
@@ -169,6 +183,14 @@ fun NavDrawerPreferenceDialog(
                 color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.padding(bottom = 8.dp),
             )
+            // Fork: back to the default order (the libraries' Jellyfin order), keeping what's pinned
+            onReset?.let {
+                TextButton(
+                    stringRes = R.string.nav_drawer_reset_order,
+                    onClick = it,
+                    modifier = Modifier.padding(bottom = 8.dp),
+                )
+            }
             val listState = rememberLazyListState()
 
             fun ensureVisible(index: Int) {
@@ -308,7 +330,14 @@ class NavDrawerPreferencesViewModel
     ) : ViewModel() {
         val state = MutableStateFlow<List<NavDrawerPin>>(listOf())
 
+        /** Fork: the list as loaded, so closing the dialog without a change saves nothing */
+        private var loaded: List<NavDrawerPin>? = null
+
         init {
+            load()
+        }
+
+        private fun load() {
             viewModelScope.launchDefault {
                 val state = navDrawerService.state.value
                 val user = serverRepository.currentUser
@@ -342,14 +371,42 @@ class NavDrawerPreferencesViewModel
                             }
                         }
                 this@NavDrawerPreferencesViewModel.state.value = pins
+                loaded = pins
             }
         }
+
+        /**
+         * Fork-only: forget the saved positions, so the drawer follows the default order again
+         * (Favorites, Discover, the libraries in the user's Jellyfin order, Video Games). What's
+         * pinned or under More is kept: order -1 is how entries saved before ordering existed look.
+         */
+        fun resetOrder(): Job =
+            viewModelScope.launchIO(ExceptionHandler(true)) {
+                val user = serverRepository.currentUser ?: return@launchIO
+                val userDto = serverRepository.currentUserDto ?: return@launchIO
+                if (user.id != userDto.id) return@launchIO
+                val toSave =
+                    state.value.map { item ->
+                        NavDrawerPinnedItem(
+                            user.rowId,
+                            item.id,
+                            if (item.pinned) NavPinType.PINNED else NavPinType.UNPINNED,
+                            -1,
+                        )
+                    }
+                serverPreferencesDao.saveNavDrawerPinnedItems(*toSave.toTypedArray())
+                val discoverActive = seerrServerRepository.active.firstOrNull() == true
+                navDrawerService.updateNavDrawer(user, userDto, discoverActive)
+                load()
+            }
 
         fun update(items: List<NavDrawerPin>) {
             state.update { items }
         }
 
         fun save() {
+            // Fork: opening and closing the dialog used to save every position, freezing the order
+            if (BuildConfig.GOOSEFLIX && state.value == loaded) return
             viewModelScope.launchIO(ExceptionHandler(true)) {
                 serverRepository.currentUser?.let { user ->
                     serverRepository.currentUserDto?.let { userDto ->
