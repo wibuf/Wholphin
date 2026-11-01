@@ -24,6 +24,9 @@ releases reach TVs and Google Play.
 - Keep fork code in its own files and gate small edits to upstream files on `BuildConfig.GOOSEFLIX`.
   New proto fields are numbered 500+. See FORK.md, Conventions.
 - **When a fork feature lands, add it to FORK.md** in the same commit.
+- **Before shipping, check FORK.md is complete:** run `git log --no-merges --oneline origin/gooseflix..HEAD`
+  and make sure every feature or behaviour change in that list has its line in FORK.md. Fixes to an
+  existing feature update that feature's line.
 
 ## Shipping
 

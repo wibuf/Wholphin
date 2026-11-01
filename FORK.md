@@ -62,10 +62,14 @@ Newest first within each area. The numbers are GooseFlix issues unless they say 
 - Rebranded as GooseFlix: name, launcher icons, TV banner, sign-in logo. Art is in `app/src/fork/art`.
 - Built-in server: no server address to type. The sign-in screen has a username/password form and a QR code for signing in from a phone (`ui/setup/home/`).
 - Self-updater from Scuffed's feed: silent install on Android 12+, one press below that (`services/update/`).
+- The image loader sends the Jellyfin token only to the Jellyfin server. Upstream's sent it with every image request, so TMDB images (pill art, Discover) received it too.
 - Google Play build: `bot.grit.gooseflix`, game cores bundled, minSdk 24, signing key exported to Play App Signing (`.github/workflows/play-signing-key.yml`, one-off).
 
 ### Home page
 - Quick pills: a row of shortcut buttons at the top (Guide, favourite channels) per user, set in Scuffed's admin page (`services/QuickPillsService.kt`, `ui/main/QuickPills.kt`).
+  - The row draws at once from the last config kept on the device, then catches up with one request for the config and one for what's on the pill channels. Backdrops start as stock art bundled in the app (guide, news, usa, hallmark, sports, tv).
+  - What's on a channel pill gets real art and details in the background: the show's backdrop, logo and exact episode (title, description, "S10 E4") when it's in the library, otherwise a TMDB backdrop and logo from Scuffed's `/api/gooseflix/art` (#1421).
+  - The Guide pill takes focus when the app opens, rather than the nav drawer.
 - Live game pills for the Patriots, Celtics, Bruins and Red Sox, first in the pill row while a game or its pregame is on. They come from Scuffed's `/api/gooseflix/live` (#1427, #1422).
 - Rows for libraries added after the user saved their home settings, placed in library order (`services/NewHomeRows.kt`).
 - Recently Added shows a single new episode, or a new season, as its show (card, header and click), with a "New episode · S1 E2 · Name" or "New episodes · Season 2" line in the header. Setting: Interface → "Show the series for new episodes", on by default (#1501; `services/NewEpisodeSeries.kt`).
@@ -95,13 +99,13 @@ Newest first within each area. The numbers are GooseFlix issues unless they say 
 - Titles that exist in more than one library show the library name in place of the year (`ui/search/SearchLibraries.kt`).
 
 ### Playback and live TV
-- Live TV recovery: a stream that errors or hangs reconnects on its own, and a channel that won't start falls back to the server transcoding it (`LiveTvRetryPolicy.kt`, `LiveTvTranscodeMemory.kt`).
+- Live TV recovery: a stream that errors or hangs mid-play reconnects on its own (up to three times). A channel that fails before it starts playing goes straight to the server transcoding it, at the live edge, without the reconnect waits, and the app transcodes that channel straight away until it's closed (`LiveTvRetryPolicy.kt`, `LiveTvTranscodeMemory.kt`).
 - Passout protection for live TV: "Still watching?" after a set time with no button pressed, then stop. Steps are 30 minutes, and it can be set for live TV, shows/movies or both (`LiveTvPassout.kt`).
 - Guide: any programme's channel can be watched, whatever time the programme is.
 - Guide moves like a cable box: up/down go to what's on at the time you're looking at and only scroll vertically; left/right set that time and only scroll sideways (`ui/detail/livetv/GuideFocus.kt`). A move only finishes once the target programme really has focus, so the highlight and the header at the top never disagree.
 - Debug overlay: stall counter, buffer ahead, distance behind live, reconnects (`StallTracker.kt`).
 - Playback timeline log (logcat tag `GooseFlixPlay`) for diagnosing start-up problems (`PlaybackTimeline.kt`).
-- Subtitle keyword priorities: prefer "full"/"dialogue" tracks and avoid signs/songs/forced ones, tuned on the anime library.
+- Subtitle keyword priorities (Settings → Advanced → Playback): preferred keywords (GooseFlix default "full, dialogue, eng") rank a track first and count as the default flag; avoided ones (default "signs, songs, forced, foreign, dub, commentary, ext") only rank it lower, never exclude it. Defaults tuned on the anime library. A track the user picked for a series or season (upstream's track memory) wins over keywords (`services/StreamChoiceService.kt`).
 - MPV: dialogue boost and loud-scene compression options.
 - MPV leaves 10-bit H.264 (Hi10P) for the server to transcode on devices without a hardware decoder for it, as ExoPlayer already did, instead of direct-playing it in software and stuttering (#1512; `util/mpv/MpvDeviceProfile.kt`).
 - Defaults: OLED black theme, pause with one press of the centre button.
