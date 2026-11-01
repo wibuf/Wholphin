@@ -233,9 +233,16 @@ class NavDrawerService
                             type = it.collectionType,
                         )
                     }
-            // Fork-only: Video Games goes below the libraries, whose order comes from each user's
-            // Jellyfin settings (Scuffed gives everyone the default order once)
-            val allItems = builtins + libraries + listOfNotNull(games.takeIf { BuildConfig.GOOSEFLIX })
+            val allItems =
+                if (BuildConfig.GOOSEFLIX) {
+                    // Fork-only: Live TV first, then Favorites and Discover, the other libraries in
+                    // each user's Jellyfin order (Scuffed gives everyone the default order once),
+                    // and Video Games last
+                    val (liveTv, others) = libraries.partition { it.type == CollectionType.LIVETV }
+                    liveTv + builtins + others + listOfNotNull(games)
+                } else {
+                    builtins + libraries
+                }
 
             val navDrawerPins =
                 withContext(WholphinDispatchers.IO) {
