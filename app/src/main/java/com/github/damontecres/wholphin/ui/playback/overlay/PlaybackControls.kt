@@ -33,6 +33,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -65,6 +66,7 @@ import androidx.tv.material3.LocalContentColor
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import androidx.tv.material3.surfaceColorAtElevation
+import com.github.damontecres.wholphin.BuildConfig
 import com.github.damontecres.wholphin.R
 import com.github.damontecres.wholphin.preferences.AppThemeColors
 import com.github.damontecres.wholphin.ui.AppColors
@@ -162,8 +164,23 @@ fun PlaybackControls(
         }
         controllerViewState.pulseControls()
     }
+    // Fork (GooseFlix #1548): during an intro, recap, outro or commercial the menu opens on its Skip
+    // button, so skipping is one press after the one that opened the menu
+    val skipFocusRequester = remember { FocusRequester() }
+    var skipFocused by remember { mutableStateOf(false) }
     LaunchedEffect(controllerViewState.controlsVisible) {
         if (controllerViewState.controlsVisible) {
+            if (BuildConfig.GOOSEFLIX && currentSegment != null) {
+                skipFocusRequester.tryRequestFocus()
+            } else {
+                initialFocusRequester.tryRequestFocus()
+            }
+        }
+    }
+    // Fork: the Skip button goes when the segment ends (or is skipped); don't leave focus nowhere
+    LaunchedEffect(currentSegment == null) {
+        if (currentSegment == null && skipFocused) {
+            skipFocused = false
             initialFocusRequester.tryRequestFocus()
         }
     }
@@ -224,7 +241,9 @@ fun PlaybackControls(
                         modifier =
                             Modifier
                                 .align(Alignment.CenterVertically)
-                                .padding(end = 32.dp),
+                                .padding(end = 32.dp)
+                                .focusRequester(skipFocusRequester)
+                                .onFocusChanged { skipFocused = it.isFocused },
                     )
                 }
                 RightPlaybackButtons(

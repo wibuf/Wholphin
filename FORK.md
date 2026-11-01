@@ -109,6 +109,7 @@ Newest first within each area. The numbers are GooseFlix issues unless they say 
 - Subtitle keyword priorities (Settings → Advanced → Playback): preferred keywords (GooseFlix default "full, dialogue, eng") rank a track first and count as the default flag; avoided ones (default "signs, songs, forced, foreign, dub, commentary, ext") only rank it lower, never exclude it. Defaults tuned on the anime library. A track the user picked for a series or season (upstream's track memory) wins over keywords (`services/StreamChoiceService.kt`).
 - MPV: dialogue boost and loud-scene compression options.
 - MPV leaves 10-bit H.264 (Hi10P) for the server to transcode on devices without a hardware decoder for it, as ExoPlayer already did, instead of direct-playing it in software and stuttering (#1512; `util/mpv/MpvDeviceProfile.kt`).
+- During an intro, recap, outro or commercial, the player menu opens with focus on its Skip button (after the floating "Skip intro" button has hidden), so skipping is one press to open and one to skip; outside a segment it opens on play/pause as before. If Skip has focus when the segment ends, focus moves to play/pause (#1548; `ui/playback/overlay/PlaybackControls.kt`).
 - Defaults: OLED black theme, pause with one press of the centre button.
 
 ## Upstream
