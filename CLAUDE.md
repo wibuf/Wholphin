@@ -20,6 +20,10 @@ releases reach TVs and Google Play.
 
 - Build and test with `-PforkBuild`, which sets `BuildConfig.GOOSEFLIX`. Run targeted tests
   (`--tests '*Name'`): the full suite is slow enough to time out.
+- A test file can hold several test classes, and `--tests` matches class names, not files:
+  `StreamChoiceServiceTest.kt` has ten (`StreamChoiceServiceTest`, `TestStreamChoiceService*`,
+  `KeywordMatchingTest`), so use `--tests '*StreamChoiceService*' --tests '*KeywordMatchingTest'`.
+  Check the test count in `app/build/test-results` matches what you expect.
 - Don't use `pkill -f` with a pattern that matches your own shell command; it kills the shell.
 - Keep fork code in its own files and gate small edits to upstream files on `BuildConfig.GOOSEFLIX`.
   New proto fields are numbered 500+. See FORK.md, Conventions.

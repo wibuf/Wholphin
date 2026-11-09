@@ -7,6 +7,7 @@ import com.github.damontecres.wholphin.data.model.ItemPlayback
 import com.github.damontecres.wholphin.data.model.JellyfinUserPreferences
 import com.github.damontecres.wholphin.data.model.SeriesTrackChoice
 import com.github.damontecres.wholphin.data.model.SeriesTrackChoiceType
+import com.github.damontecres.wholphin.data.model.TrackFlag
 import com.github.damontecres.wholphin.data.model.ServerUserConfig
 import com.github.damontecres.wholphin.data.model.TrackIndex
 import com.github.damontecres.wholphin.preferences.AppPreferences
@@ -956,6 +957,75 @@ class TestStreamChoiceServiceKeywords(
                         ),
                     preferredKeywords = "full",
                 ),
+                // Fork: a series' remembered choice of only a language (converted from the old
+                // per-series setting) follows the keywords, not the default flag
+                TestInput(
+                    expectedIndex = 1,
+                    userSubtitleMode = SubtitlePlaybackMode.DEFAULT,
+                    streamAudioLang = "jpn",
+                    subtitles =
+                        listOf(
+                            subtitle(0, "eng", default = true, title = "Signs & Songs"),
+                            subtitle(1, "eng", title = "Full Dialogue"),
+                        ),
+                    plc = plc(subtitleLang = "eng"),
+                    preferredKeywords = "full, dialogue, eng",
+                    avoidedKeywords = "signs, songs, forced, foreign, dub, commentary, ext",
+                ),
+                // ...and without keywords it stays as upstream: the default-flagged track
+                TestInput(
+                    expectedIndex = 0,
+                    userSubtitleMode = SubtitlePlaybackMode.DEFAULT,
+                    streamAudioLang = "jpn",
+                    subtitles =
+                        listOf(
+                            subtitle(0, "eng", default = true, title = "Signs & Songs"),
+                            subtitle(1, "eng", title = "Full Dialogue"),
+                        ),
+                    plc = plc(subtitleLang = "eng"),
+                ),
+                // A full track picked by hand (it was the default) stays the pick on an episode
+                // whose default track is signs
+                TestInput(
+                    expectedIndex = 1,
+                    userSubtitleMode = SubtitlePlaybackMode.DEFAULT,
+                    streamAudioLang = "jpn",
+                    subtitles =
+                        listOf(
+                            subtitle(0, "eng", default = true, title = "Signs & Songs"),
+                            subtitle(1, "eng", title = "Full Dialogue"),
+                        ),
+                    plc = pickedSubtitle("Full Dialogue", relativeIndex = 0, TrackFlag.DEFAULT),
+                    preferredKeywords = "full, dialogue, eng",
+                    avoidedKeywords = "signs, songs, forced, foreign, dub, commentary, ext",
+                ),
+                // A signs track picked on purpose stands, whatever the keywords say
+                TestInput(
+                    expectedIndex = 0,
+                    userSubtitleMode = SubtitlePlaybackMode.DEFAULT,
+                    streamAudioLang = "jpn",
+                    subtitles =
+                        listOf(
+                            subtitle(0, "eng", default = true, title = "Signs & Songs"),
+                            subtitle(1, "eng", title = "Full Dialogue"),
+                        ),
+                    plc = pickedSubtitle("Signs & Songs", relativeIndex = 0, TrackFlag.DEFAULT, TrackFlag.SIGNS),
+                    preferredKeywords = "full, dialogue, eng",
+                    avoidedKeywords = "signs, songs, forced, foreign, dub, commentary, ext",
+                ),
+                // "Only forced" for a series: a group tag mentioning songs doesn't make a full
+                // track a signs track
+                TestInput(
+                    expectedIndex = 1,
+                    userSubtitleMode = SubtitlePlaybackMode.DEFAULT,
+                    streamAudioLang = "jpn",
+                    subtitles =
+                        listOf(
+                            subtitle(0, "eng", title = "Full Subtitles [MTBB (Hakoniwa songs)]"),
+                            subtitle(1, "eng", title = "Signs & Songs"),
+                        ),
+                    plc = plc(subtitlesOnlyForced = true),
+                ),
                 // Avoided keyword demotes the default-flagged track in ALWAYS mode
                 TestInput(
                     expectedIndex = 1,
@@ -1440,6 +1510,27 @@ private fun plc(
             ).let(::add)
         }
     }
+
+/** Fork: a subtitle track the user picked by hand for a series, remembered with its title and flags */
+private fun pickedSubtitle(
+    title: String,
+    relativeIndex: Int,
+    vararg flags: TrackFlag,
+): List<SeriesTrackChoice> =
+    listOf(
+        SeriesTrackChoice(
+            userId = 1,
+            language = "eng",
+            parentId = UUID.randomUUID(),
+            type = SeriesTrackChoiceType.SUBTITLE,
+            activation = ActivationFlag.ACTIVATED,
+            trackFlags = flags.fold(0) { acc, f -> acc or f.flag },
+            codec = null,
+            relativeTrackIndex = relativeIndex,
+            title = title,
+            audioChannels = null,
+        ),
+    )
 
 class KeywordMatchingTest {
     @Test

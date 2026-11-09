@@ -1,5 +1,6 @@
 package com.github.damontecres.wholphin.services
 
+import com.github.damontecres.wholphin.BuildConfig
 import com.github.damontecres.wholphin.R
 import com.github.damontecres.wholphin.data.SeriesTrackChoiceDao
 import com.github.damontecres.wholphin.data.ServerRepository
@@ -310,8 +311,12 @@ class StreamChoiceService
 
                     ActivationFlag.ACTIVATED -> {
                         val result =
-                            scoreStreams(candidates, first)
-                                ?: throw IllegalStateException("scoreStreams should not return null for activated")
+                            withKeywords(
+                                scoreStreams(candidates, first)
+                                    ?: throw IllegalStateException("scoreStreams should not return null for activated"),
+                                first,
+                                prefs,
+                            )
                         handleSubtitleStreamChoiceResult(
                             result = result,
                             audioStreamLang = audioStreamLang,
@@ -550,6 +555,33 @@ class StreamChoiceService
             )
 
         /**
+         * Fork: the subtitle keywords also count for a series' remembered track choice. Upstream's
+         * scoring for it never looks at them, so a choice that remembers only a language (every
+         * choice converted from the old per-series language setting) picked whichever English
+         * track was flagged default, often "Signs & Songs" on anime.
+         *
+         * Keywords weigh more than the remembered default/SDH/signs flags (500) but less than a
+         * forced flag (1,000) or the language (10,000). If the remembered track itself goes
+         * against the keywords (the user picked a signs or commentary track on purpose), they
+         * step aside and the user's pick stands.
+         */
+        private fun withKeywords(
+            scored: List<ScoredMediaStream>,
+            choice: SeriesTrackChoice,
+            prefs: UserPreferences,
+        ): List<ScoredMediaStream> {
+            val preferred = parseKeywords(prefs.appPreferences.playbackPreferences.subtitlePreferredKeywords)
+            val avoided = parseKeywords(prefs.appPreferences.playbackPreferences.subtitleAvoidedKeywords)
+            if (preferred.isEmpty() && avoided.isEmpty()) return scored
+            val choiceAgainstKeywords =
+                choice.title?.let { titleKeywordScore(it, preferred, avoided) < 0 } ?: false
+            if (choiceAgainstKeywords) return scored
+            return scored
+                .map { it.copy(score = it.score + KEYWORD_WEIGHT * keywordScore(it.stream, preferred, avoided)) }
+                .sortedByDescending { it.score }
+        }
+
+        /**
          * Returns true if a word in the track's title starts with any of the keywords
          * (case-insensitive), so "eng" finds "English" but not "Bengali". With [ignoreTags],
          * [bracketed] release-group tags are left out first, so "Full Subtitles [Official+Signs]"
@@ -581,6 +613,18 @@ class StreamChoiceService
             return score
         }
 
+        /** [keywordScore] for a bare track title, eg a remembered choice's */
+        private fun titleKeywordScore(
+            title: String,
+            preferredKeywords: List<String>,
+            avoidedKeywords: List<String>,
+        ): Int {
+            var score = 0
+            if (preferredKeywords.isNotEmpty() && titleMatches(title, preferredKeywords)) score++
+            if (avoidedKeywords.isNotEmpty() && titleMatches(withoutTags(title), avoidedKeywords)) score--
+            return score
+        }
+
         companion object {
             /** True if a word in [title] starts with one of [keywords], ignoring case */
             fun titleMatches(
@@ -600,6 +644,9 @@ class StreamChoiceService
             fun withoutTags(title: String): String = title.replace(BRACKET_TAG, " ").takeIf { it.isNotBlank() } ?: title
 
             private val BRACKET_TAG = Regex("""\[[^\]]*]""")
+
+            /** Fork: what one keyword match is worth against a series' remembered choice, see withKeywords */
+            const val KEYWORD_WEIGHT = 600
 
             /** Splits a comma-separated keyword preference into non-blank keywords */
             fun parseKeywords(value: String?): List<String> =
@@ -631,7 +678,10 @@ private fun String?.equalsLangExact(lang: String?): Boolean = this.isNotUnknown 
 fun isForcedOrSigns(track: MediaStream): Boolean = track.isForced || isSigns(track)
 
 fun isSigns(track: MediaStream): Boolean {
-    val title = track.title ?: track.displayTitle ?: return false
+    val fullTitle = track.title ?: track.displayTitle ?: return false
+    // Fork: leave out [bracketed] group tags, so "Full Subtitles [MTBB (Hakoniwa songs)]" isn't a
+    // signs track, as for the avoided subtitle keywords
+    val title = if (BuildConfig.GOOSEFLIX) StreamChoiceService.withoutTags(fullTitle) else fullTitle
     return title.contains("forced", ignoreCase = true) ||
         title.contains("signs", ignoreCase = true) ||
         title.contains("songs", ignoreCase = true)
