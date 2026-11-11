@@ -409,16 +409,12 @@ class StreamChoiceService
 
                         SubtitlePlaybackMode.DEFAULT -> {
                             // A preferred keyword match qualifies a track just like the default flag,
-                            // so users can pick a non-default track (eg "Full Dialogue") by keyword.
-                            // Not when the audio is already in the track's language, though: that
-                            // would turn subtitles on over an English dub or an English-only show.
+                            // so users can pick a non-default track (eg "Full Dialogue") by keyword,
+                            // whatever the audio language (owner, 2026-11-11: English audio included)
                             val isDefaultLike = { track: MediaStream ->
                                 track.isDefault ||
                                     track.isForced ||
-                                    (
-                                        matchesKeyword(track, preferredKeywords) &&
-                                            !(audioStreamLang != null && track.language.equals(audioStreamLang, true))
-                                    )
+                                    matchesKeyword(track, preferredKeywords)
                             }
                             if (subtitleLanguage.isNotNullOrBlank()) {
                                 candidates.firstOrNull { it.language == subtitleLanguage && isDefaultLike(it) }

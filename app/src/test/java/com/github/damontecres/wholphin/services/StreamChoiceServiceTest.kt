@@ -1249,10 +1249,9 @@ class TestStreamChoiceServiceKeywordEdgeCases(
                         ),
                     preferredKeywords = "full",
                 ),
-                // ...but not over audio already in the track's language (an English dub,
-                // or an English-only show): stock leaves these off, and so do keywords
+                // ...and the same with English audio: keywords apply whatever the audio language
                 TestInput(
-                    expectedIndex = null,
+                    expectedIndex = 0,
                     userSubtitleMode = SubtitlePlaybackMode.DEFAULT,
                     streamAudioLang = "eng",
                     subtitles =
@@ -1261,6 +1260,20 @@ class TestStreamChoiceServiceKeywordEdgeCases(
                             subtitle(1, "eng", title = "Signs & Songs"),
                         ),
                     preferredKeywords = "full, dialogue, eng",
+                ),
+                // Violet Evergarden S1E9 with English audio: the full track, not the forced
+                // Signs/Songs track
+                TestInput(
+                    expectedIndex = 0,
+                    userSubtitleMode = SubtitlePlaybackMode.DEFAULT,
+                    streamAudioLang = "eng",
+                    subtitles =
+                        listOf(
+                            subtitle(0, "eng", title = "Full Subtitles [SCY]"),
+                            subtitle(1, "eng", forced = true, title = "Signs/Songs [SCY]"),
+                        ),
+                    preferredKeywords = "full, dialogue, eng",
+                    avoidedKeywords = "signs, songs, forced, foreign, dub, commentary, ext",
                 ),
                 // Keywords match the start of a word: "eng" finds "English", not "Bengali"
                 TestInput(
