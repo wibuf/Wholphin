@@ -146,6 +146,14 @@ class HomeViewModel
             settings: HomePageResolvedSettings,
         ) {
             Timber.i("Starting loadHomeRows")
+            // Fork: home load timing, `adb logcat -s GooseFlixHome` (milliseconds since this load began)
+            val loadStartedAt = android.os.SystemClock.elapsedRealtime()
+            fun timing(message: String) {
+                if (BuildConfig.GOOSEFLIX) {
+                    Timber.tag("GooseFlixHome").i("+%dms %s", android.os.SystemClock.elapsedRealtime() - loadStartedAt, message)
+                }
+            }
+            timing("load started, ${settings.rows.size} rows")
             try {
                 val preferences = userPreferencesService.getCurrent()
                 val prefs = preferences.appPreferences.homePagePreferences
@@ -243,6 +251,7 @@ class HomeViewModel
                                     }
                             }
                         Timber.v("Got row data index=%s", rowIndex)
+                        timing("row $rowIndex ${rowData::class.simpleName} ${(rowData as? HomeRowLoadingState.Success)?.items?.size ?: ""}")
                         remaining.removeIf { it.index == rowIndex }
                         _state.update { state ->
                             val newRows =
@@ -253,6 +262,7 @@ class HomeViewModel
                                 homeRows = newRows,
                                 loadingState =
                                     if (HomeFirstLoad.showPage(state.loadingState, newRows)) {
+                                        if (state.loadingState != LoadingState.Success) timing("page shown")
                                         LoadingState.Success
                                     } else {
                                         state.loadingState
@@ -260,6 +270,7 @@ class HomeViewModel
                             )
                         }
                     }
+                    timing("all rows done")
                     _state.update {
                         it.copy(
                             loadingState = LoadingState.Success,

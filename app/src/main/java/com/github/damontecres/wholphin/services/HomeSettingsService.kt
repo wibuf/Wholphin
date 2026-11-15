@@ -38,7 +38,6 @@ import kotlinx.serialization.json.jsonPrimitive
 import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.api.client.extensions.userApi
 import org.jellyfin.sdk.api.client.extensions.userLibraryApi
-import org.jellyfin.sdk.api.client.extensions.userViewsApi
 import org.jellyfin.sdk.model.UUID
 import org.jellyfin.sdk.model.api.CollectionType
 import timber.log.Timber
@@ -398,9 +397,8 @@ class HomeSettingsService
             try {
                 val userDto = serverRepository.currentUserDto?.takeIf { it.id == userId }
                 val created =
-                    api.userViewsApi
-                        .getUserViews(userId = userId)
-                        .content.items
+                    navDrawerService
+                        .userViews(userId)
                         .associate { it.id to it.dateCreated?.toInstant(ZoneOffset.UTC) }
                 val allLibraries = navDrawerService.getAllUserLibraries(userId, userDto?.tvAccess ?: false)
                 val libraries =

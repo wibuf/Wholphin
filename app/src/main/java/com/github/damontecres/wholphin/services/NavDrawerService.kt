@@ -46,6 +46,9 @@ import kotlin.time.Duration.Companion.seconds
  * Gets the items to show in the nav drawer
  */
 @Singleton
+/** Fork: how long a user's library list is reused (see [NavDrawerService.userViews]) */
+private const val VIEWS_CACHE_MS = 60_000L
+
 class NavDrawerService
     @Inject
     constructor(
@@ -130,14 +133,36 @@ class NavDrawerService
         /**
          * Get all the libraries the user has access to
          */
+        // Fork (home speed): one home load asked Jellyfin for the user's libraries three times, about
+        // a second each, before the first row could start. Kept for a minute, shared by everything.
+        private class CachedViews(
+            val userId: UUID,
+            val at: Long,
+            val items: List<org.jellyfin.sdk.model.api.BaseItemDto>,
+        )
+
+        @Volatile
+        private var cachedViews: CachedViews? = null
+
+        /** The user's libraries as Jellyfin lists them; GooseFlix builds reuse them for a minute */
+        suspend fun userViews(userId: UUID): List<org.jellyfin.sdk.model.api.BaseItemDto> {
+            val now = android.os.SystemClock.elapsedRealtime()
+            if (BuildConfig.GOOSEFLIX) {
+                cachedViews?.takeIf { it.userId == userId && now - it.at < VIEWS_CACHE_MS }?.let { return it.items }
+            }
+            val items =
+                api.userViewsApi
+                    .getUserViews(userId = userId)
+                    .content.items
+            if (BuildConfig.GOOSEFLIX) cachedViews = CachedViews(userId, now, items)
+            return items
+        }
+
         suspend fun getAllUserLibraries(
             userId: UUID,
             tvAccess: Boolean,
         ): List<Library> {
-            val userViews =
-                api.userViewsApi
-                    .getUserViews(userId = userId)
-                    .content.items
+            val userViews = userViews(userId)
             val recordingFolders =
                 if (tvAccess) {
                     try {
