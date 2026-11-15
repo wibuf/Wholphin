@@ -105,7 +105,9 @@ fun RequestHomeHeader(
     entry: MyRequests.Entry,
     modifier: Modifier = Modifier,
 ) {
-    val item = entry.item
+    // The card's details (backdrop, overview, year), once fetched on focus
+    val details by MyRequests.details.collectAsState()
+    val item = details[MyRequests.detailsKey(entry.item)] ?: entry.item
     Column(
         verticalArrangement = Arrangement.spacedBy(4.dp),
         modifier = modifier,
@@ -198,9 +200,23 @@ class RequestsRowViewModel
             }
         }
 
+        private var backdropJob: kotlinx.coroutines.Job? = null
+
+        /** Shows the focused request's backdrop, fetching its details the first time */
         fun showBackdrop(item: DiscoverItem) {
-            viewModelScope.launchIO {
-                backdropService.submit("discover_${item.id}", item.backDropUrl)
-            }
+            backdropJob?.cancel()
+            backdropJob =
+                viewModelScope.launchIO {
+                    if (item.backDropUrl == null && MyRequests.details.value[MyRequests.detailsKey(item)] == null) {
+                        // Wait until focus settles, so scrolling past cards doesn't fetch each one
+                        kotlinx.coroutines.delay(DETAILS_DELAY_MS)
+                    }
+                    val full = myRequests.details(item) ?: item
+                    backdropService.submit("discover_${item.id}", full.backDropUrl)
+                }
+        }
+
+        companion object {
+            const val DETAILS_DELAY_MS = 300L
         }
     }

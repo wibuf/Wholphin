@@ -80,6 +80,41 @@ class MyRequests
             invalidate()
         }
 
+        /**
+         * The card with its backdrop, overview, year and logo, which Scuffed's cards leave out: one
+         * Discover details call (through the Scuffed Seerr proxy) the first time a card is focused,
+         * then kept in [details]. Null if the details can't be had; the card itself is unchanged.
+         */
+        suspend fun details(item: DiscoverItem): DiscoverItem? {
+            if (item.backDropUrl != null) return item
+            val key = detailsKey(item)
+            _details.value[key]?.let { return it }
+            val full =
+                try {
+                    when (item.type) {
+                        SeerrItemType.MOVIE -> seerrService.createDiscoverItem(seerrService.api.moviesApi.movieMovieIdGet(movieId = item.id))
+                        SeerrItemType.TV -> seerrService.createDiscoverItem(seerrService.api.tvApi.tvTvIdGet(tvId = item.id))
+                        else -> null
+                    }
+                } catch (ex: kotlinx.coroutines.CancellationException) {
+                    throw ex
+                } catch (ex: Exception) {
+                    Timber.w(ex, "My requests: no details for %s", key)
+                    null
+                } ?: return null
+            // Keep the card's own title, poster and status; take what it lacks
+            val merged =
+                item.copy(
+                    overview = item.overview ?: full.overview,
+                    releaseDate = item.releaseDate ?: full.releaseDate,
+                    backDropUrl = full.backDropUrl,
+                    logoUrl = item.logoUrl ?: full.logoUrl,
+                    posterUrl = item.posterUrl ?: full.posterUrl,
+                )
+            _details.update { it + (key to merged) }
+            return merged
+        }
+
         @Serializable
         private data class Card(
             val id: Int,
@@ -231,6 +266,13 @@ class MyRequests
 
             /** Requests removed while the home page is up, hidden from the row and its header */
             val removed: StateFlow<Set<Int>> = _removed
+
+            private val _details = MutableStateFlow<Map<String, DiscoverItem>>(emptyMap())
+
+            /** Cards filled in with their details ([details]), by [detailsKey] */
+            val details: StateFlow<Map<String, DiscoverItem>> = _details
+
+            fun detailsKey(item: DiscoverItem) = "${item.type}:${item.id}"
 
             /** Fetch afresh next time, eg after the user makes or cancels a request */
             fun invalidate() {
