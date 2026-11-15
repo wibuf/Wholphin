@@ -57,6 +57,8 @@ fun DiscoverItemCard(
     showOverlay: Boolean = true,
     interactionSource: MutableInteractionSource = remember { MutableInteractionSource() },
     width: Dp = Cards.height2x3 * AspectRatios.TALL,
+    // Fork (GooseFlix #1636): a request's download progress, 0–100, drawn as a bar along the bottom
+    progressPercent: Double? = null,
 ) {
     val focused by interactionSource.collectIsFocusedAsState()
     var focusedAfterDelay by remember { mutableStateOf(false) }
@@ -112,6 +114,15 @@ fun DiscoverItemCard(
                         Modifier
                             .fillMaxSize(),
                 )
+                if (progressPercent != null) {
+                    ItemCardImageOverlay(
+                        favorite = false,
+                        watched = false,
+                        unwatchedCount = 0,
+                        watchedPercent = progressPercent.coerceIn(1.0, 99.0),
+                        numberOfVersions = -1,
+                    )
+                }
                 when (item?.availability) {
                     SeerrAvailability.PENDING,
                     SeerrAvailability.PROCESSING,

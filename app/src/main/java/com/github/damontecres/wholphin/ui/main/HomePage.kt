@@ -444,7 +444,6 @@ fun HomePageContent(
                     (homeRows.getOrNull(position.row) as? HomeRowLoadingState.Requests)
                         ?.visible(removedRequests)
                         ?.getOrNull(position.column)
-                        ?.item
                 }
             // The row's current copy of the focused pill, which the minute-by-minute check updates
             val pill = focusedPill?.let { focused -> pills.firstOrNull { it.key == focused.key } ?: focused }

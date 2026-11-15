@@ -86,6 +86,7 @@ fun RequestsHomeRow(
                 onClick = onClick,
                 onLongClick = onLongClick,
                 showOverlay = true,
+                progressPercent = entries.getOrNull(index)?.progress,
                 modifier =
                     cardModifier.onFocusChanged {
                         if (it.isFocused) {
@@ -101,9 +102,10 @@ fun RequestsHomeRow(
 /** The home header while a request is focused: its title or logo, what it is, and its status */
 @Composable
 fun RequestHomeHeader(
-    item: DiscoverItem,
+    entry: MyRequests.Entry,
     modifier: Modifier = Modifier,
 ) {
+    val item = entry.item
     Column(
         verticalArrangement = Arrangement.spacedBy(4.dp),
         modifier = modifier,
@@ -119,7 +121,7 @@ fun RequestHomeHeader(
             modifier = Modifier.fillMaxWidth(.6f),
         ) {
             Text(
-                text = requestFacts(item),
+                text = requestFacts(item, entry.label, entry.progress),
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
@@ -143,23 +145,34 @@ fun RequestHomeHeader(
     }
 }
 
-/** "2024 · Movie · Requested", "Show · Available" */
-internal fun requestFacts(item: DiscoverItem): String =
-    listOfNotNull(
+/**
+ * "2024 · Movie · Requested", "Show · Downloading 42%". Media Adder's own wording ([label]) when
+ * Scuffed sent it, else the Discover availability.
+ */
+internal fun requestFacts(
+    item: DiscoverItem,
+    label: String? = null,
+    progress: Double? = null,
+): String {
+    val status =
+        label ?: when (item.availability) {
+            SeerrAvailability.AVAILABLE -> "Available"
+            SeerrAvailability.PARTIALLY_AVAILABLE -> "Partly available"
+            SeerrAvailability.PROCESSING -> "Downloading"
+            else -> "Requested"
+        }
+    // Media Adder's label may carry the percentage already
+    val percent = progress?.takeIf { '%' !in status }?.let { " ${it.toInt().coerceIn(0, 100)}%" }.orEmpty()
+    return listOfNotNull(
         item.releaseDate?.year?.toString(),
         when (item.type) {
             SeerrItemType.MOVIE -> "Movie"
             SeerrItemType.TV -> "Show"
             else -> null
         },
-        when (item.availability) {
-            SeerrAvailability.AVAILABLE -> "Available"
-            SeerrAvailability.PARTIALLY_AVAILABLE -> "Partly available"
-            SeerrAvailability.PROCESSING -> "Downloading"
-            SeerrAvailability.PENDING -> "Requested"
-            else -> "Requested"
-        },
+        status + percent,
     ).joinToString(" · ")
+}
 
 @HiltViewModel
 class RequestsRowViewModel
