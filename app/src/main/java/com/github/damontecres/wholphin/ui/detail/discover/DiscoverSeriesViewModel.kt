@@ -417,6 +417,8 @@ class DiscoverSeriesViewModel
                         showToast(context, "An error occurred")
                     }
 
+                    // Fork (GooseFlix #1636): My requests on home fetches afresh
+                    if (com.github.damontecres.wholphin.BuildConfig.GOOSEFLIX) com.github.damontecres.wholphin.services.MyRequests.invalidate()
                     fetchAndSetItem().await()?.let {
                         updateSeasonStatus(it)
                         updateAvailability()
@@ -431,6 +433,8 @@ class DiscoverSeriesViewModel
                     // TODO handle multiple requests? Or just delete self's request?
                     try {
                         seerrService.api.requestApi.requestRequestIdDelete(it.id.toString())
+                        // Fork (GooseFlix #1636): My requests on home fetches afresh
+                        if (com.github.damontecres.wholphin.BuildConfig.GOOSEFLIX) com.github.damontecres.wholphin.services.MyRequests.invalidate()
                     } catch (ex: CancellationException) {
                         throw ex
                     } catch (ex: Exception) {

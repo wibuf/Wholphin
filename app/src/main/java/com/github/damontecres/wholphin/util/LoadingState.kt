@@ -85,9 +85,13 @@ sealed interface HomeRowLoadingState {
     /** Fork-only (GooseFlix #1636): the user's own Seerr requests, newest first */
     data class Requests(
         override val title: StringProvider,
-        val items: List<com.github.damontecres.wholphin.data.model.DiscoverItem>,
+        val entries: List<com.github.damontecres.wholphin.services.MyRequests.Entry>,
         val viewOptions: HomeRowViewOptions = HomeRowViewOptions(),
-    ) : HomeRowLoadingState
+    ) : HomeRowLoadingState {
+        /** The cards to show: [entries] less any removed while the home page is up */
+        fun visible(removed: Set<Int>): List<com.github.damontecres.wholphin.services.MyRequests.Entry> =
+            entries.filter { it.requestId !in removed }
+    }
 
     data class Error(
         override val title: StringProvider,

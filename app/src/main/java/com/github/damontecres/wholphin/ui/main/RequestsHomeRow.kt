@@ -7,6 +7,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.text.style.TextOverflow
@@ -20,9 +25,13 @@ import com.github.damontecres.wholphin.data.model.DiscoverItem
 import com.github.damontecres.wholphin.data.model.SeerrAvailability
 import com.github.damontecres.wholphin.data.model.SeerrItemType
 import com.github.damontecres.wholphin.services.BackdropService
+import com.github.damontecres.wholphin.services.MyRequests
 import com.github.damontecres.wholphin.services.NavigationManager
 import com.github.damontecres.wholphin.ui.cards.DiscoverItemCard
 import com.github.damontecres.wholphin.ui.cards.ItemRow
+import com.github.damontecres.wholphin.ui.components.DialogItem
+import com.github.damontecres.wholphin.ui.components.DialogParams
+import com.github.damontecres.wholphin.ui.components.DialogPopup
 import com.github.damontecres.wholphin.ui.components.TitleOrLogo
 import com.github.damontecres.wholphin.ui.launchIO
 import com.github.damontecres.wholphin.ui.nav.Destination
@@ -41,11 +50,34 @@ fun RequestsHomeRow(
     modifier: Modifier = Modifier,
     viewModel: RequestsRowViewModel = hiltViewModel(),
 ) {
+    val removed by MyRequests.removed.collectAsState()
+    val entries = remember(row, removed) { row.visible(removed) }
+    // Long press: open it, or take it off the list (like a library card's long-press menu)
+    var menuFor by remember { mutableStateOf<MyRequests.Entry?>(null) }
+    menuFor?.let { entry ->
+        DialogPopup(
+            params =
+                DialogParams(
+                    fromLongClick = true,
+                    title = entry.item.title.orEmpty(),
+                    items =
+                        listOf(
+                            DialogItem(headlineContent = { Text("Open") }, onClick = { viewModel.open(entry.item) }),
+                            DialogItem(
+                                headlineContent = { Text("Remove from My requests") },
+                                supportingContent = { Text("The title stays in the library if it's there") },
+                                onClick = { viewModel.remove(entry.requestId) },
+                            ),
+                        ),
+                ),
+            onDismissRequest = { menuFor = null },
+        )
+    }
     ItemRow(
         title = row.title.getString(),
-        items = row.items,
+        items = entries.map { it.item },
         onClickItem = { _, item -> viewModel.open(item) },
-        onLongClickItem = { _, _ -> },
+        onLongClickItem = { index, _ -> menuFor = entries.getOrNull(index) },
         modifier = modifier,
         horizontalPadding = row.viewOptions.spacing.dp,
         cardContent = { index, item, cardModifier, onClick, onLongClick ->
@@ -135,9 +167,22 @@ class RequestsRowViewModel
     constructor(
         private val navigationManager: NavigationManager,
         private val backdropService: BackdropService,
+        private val myRequests: MyRequests,
     ) : ViewModel() {
         fun open(item: DiscoverItem) {
             navigationManager.navigateTo(Destination.DiscoveredItem(item))
+        }
+
+        fun remove(requestId: Int) {
+            viewModelScope.launchIO {
+                try {
+                    myRequests.remove(requestId)
+                } catch (ex: kotlinx.coroutines.CancellationException) {
+                    throw ex
+                } catch (ex: Exception) {
+                    timber.log.Timber.w(ex, "Could not remove request %s", requestId)
+                }
+            }
         }
 
         fun showBackdrop(item: DiscoverItem) {

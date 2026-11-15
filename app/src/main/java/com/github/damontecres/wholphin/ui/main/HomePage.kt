@@ -438,9 +438,13 @@ fun HomePageContent(
                     }
                 }
             // Fork (GooseFlix #1636): a focused request gets its own header; requests aren't Jellyfin items
+            val removedRequests by com.github.damontecres.wholphin.services.MyRequests.removed.collectAsState()
             val focusedRequest =
-                remember(homeRows, position) {
-                    (homeRows.getOrNull(position.row) as? HomeRowLoadingState.Requests)?.items?.getOrNull(position.column)
+                remember(homeRows, position, removedRequests) {
+                    (homeRows.getOrNull(position.row) as? HomeRowLoadingState.Requests)
+                        ?.visible(removedRequests)
+                        ?.getOrNull(position.column)
+                        ?.item
                 }
             // The row's current copy of the focused pill, which the minute-by-minute check updates
             val pill = focusedPill?.let { focused -> pills.firstOrNull { it.key == focused.key } ?: focused }
@@ -553,7 +557,8 @@ fun HomePageContent(
 
                                 is HomeRowLoadingState.Requests -> {
                                     // Fork (GooseFlix #1636): shown only when there are requests
-                                    if (r.items.isNotEmpty()) {
+                                    val removedNow by com.github.damontecres.wholphin.services.MyRequests.removed.collectAsState()
+                                    if (r.visible(removedNow).isNotEmpty()) {
                                         RequestsHomeRow(
                                             row = r,
                                             onFocusPosition = { column -> currentOnFocusPosition(RowColumn(rowIndex, column)) },

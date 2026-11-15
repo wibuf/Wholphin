@@ -210,6 +210,8 @@ class DiscoverMovieViewModel
                         )
                     Timber.v("postRequest=%s", postRequest)
                     seerrService.api.requestApi.requestPost(postRequest)
+                    // Fork (GooseFlix #1636): My requests on home fetches afresh
+                    if (com.github.damontecres.wholphin.BuildConfig.GOOSEFLIX) com.github.damontecres.wholphin.services.MyRequests.invalidate()
                 } catch (ex: CancellationException) {
                     throw ex
                 } catch (ex: Exception) {
@@ -227,6 +229,8 @@ class DiscoverMovieViewModel
                     // TODO handle multiple requests? Or just delete self's request?
                     try {
                         seerrService.api.requestApi.requestRequestIdDelete(it.id.toString())
+                        // Fork (GooseFlix #1636): My requests on home fetches afresh
+                        if (com.github.damontecres.wholphin.BuildConfig.GOOSEFLIX) com.github.damontecres.wholphin.services.MyRequests.invalidate()
                     } catch (ex: kotlinx.coroutines.CancellationException) {
                         throw ex
                     } catch (ex: Exception) {
