@@ -762,7 +762,8 @@ class HomeDataService
                     HomeRowLoadingState.Requests(StringStringProvider(row.title), myRequests.load(MY_REQUESTS_LIMIT), row.viewOptions)
                 } catch (ex: CancellationException) {
                     throw ex
-                } catch (ex: Exception) {
+                } catch (ex: Throwable) {
+                    // Throwable, not Exception: an optional row must never take the home page down
                     Timber.w(ex, "My requests failed")
                     empty
                 }
@@ -783,7 +784,8 @@ class HomeDataService
                 if (ex.status == 404) PersonalRows.markUnavailable()
                 Timber.i("Personal row %s unavailable: HTTP %s", row.endpoint, ex.status)
                 empty
-            } catch (ex: Exception) {
+            } catch (ex: Throwable) {
+                // Throwable, not Exception: an optional row must never take the home page down
                 Timber.w(ex, "Personal row %s failed", row.endpoint)
                 empty
             }

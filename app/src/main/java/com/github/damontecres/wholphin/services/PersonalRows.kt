@@ -99,10 +99,14 @@ object PersonalRows {
         }
     }
 
-    /** The plugin percent-encodes header values (UTF-8), since titles can be non-ASCII */
+    /**
+     * The plugin percent-encodes header values (UTF-8), since titles can be non-ASCII. Uses the
+     * charset-name overload: `decode(String, Charset)` is Android 13+ only, and crashed the home page
+     * on the Shield (Android 11).
+     */
     fun decodeHeader(value: String): String =
         try {
-            java.net.URLDecoder.decode(value.replace("+", "%2B"), Charsets.UTF_8)
+            java.net.URLDecoder.decode(value.replace("+", "%2B"), "UTF-8")
         } catch (ex: IllegalArgumentException) {
             value
         }

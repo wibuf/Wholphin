@@ -251,7 +251,7 @@ class HomeViewModel
                                     }
                             }
                         Timber.v("Got row data index=%s", rowIndex)
-                        timing("row $rowIndex ${rowData::class.simpleName} ${(rowData as? HomeRowLoadingState.Success)?.items?.size ?: ""}")
+                        timing("row $rowIndex ${timingLabel(rowData)}")
                         remaining.removeIf { it.index == rowIndex }
                         _state.update { state ->
                             val newRows =
@@ -398,3 +398,14 @@ private fun isWatchingRow(row: HomeRowConfig) =
     row is HomeRowConfig.ContinueWatching ||
         row is HomeRowConfig.NextUp ||
         row is HomeRowConfig.ContinueWatchingCombined
+
+/** Fork: a row's state for the GooseFlixHome timing log, readable in release builds (R8 renames classes) */
+private fun timingLabel(row: HomeRowLoadingState): String =
+    when (row) {
+        is HomeRowLoadingState.Success -> "ok ${row.items.size}"
+        is HomeRowLoadingState.Requests -> "requests ${row.entries.size}"
+        is HomeRowLoadingState.Games -> "games"
+        is HomeRowLoadingState.Error -> "error ${row.exception?.javaClass?.name.orEmpty()}"
+        is HomeRowLoadingState.Loading -> "loading"
+        is HomeRowLoadingState.Pending -> "pending"
+    }
