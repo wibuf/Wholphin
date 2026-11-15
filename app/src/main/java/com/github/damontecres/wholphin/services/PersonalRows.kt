@@ -48,6 +48,38 @@ object PersonalRows {
             add(HomeRowConfig.CustomEndpoint(endpoint = MY_REQUESTS, title = "My requests"))
         }
 
+    /**
+     * Where My requests goes (owner, 2026-11-15): above the seasonal library, ie right after the TV
+     * library's row, which the seasonal one follows (Scuffed's library order). Without a TV row,
+     * after Continue Watching / Next Up; without those, at the top.
+     */
+    fun myRequestsIndex(
+        rows: List<HomeRowConfig>,
+        tvLibraryId: java.util.UUID?,
+    ): Int {
+        tvLibraryId
+            ?.let { tv -> rows.indexOfFirst { (it as? HomeRowConfig.RecentlyAdded)?.parentId == tv } }
+            ?.takeIf { it >= 0 }
+            ?.let { return it + 1 }
+        val lastWatching =
+            rows.indexOfLast {
+                it is HomeRowConfig.ContinueWatching || it is HomeRowConfig.NextUp || it is HomeRowConfig.ContinueWatchingCombined
+            }
+        return lastWatching + 1
+    }
+
+    /** [rows] plus [personal], My requests placed by [myRequestsIndex] and the rest at the bottom */
+    fun withPersonal(
+        rows: List<HomeRowConfig>,
+        personal: List<HomeRowConfig>,
+        tvLibraryId: java.util.UUID?,
+    ): List<HomeRowConfig> {
+        val (requests, others) = personal.partition { (it as? HomeRowConfig.CustomEndpoint)?.endpoint == MY_REQUESTS }
+        val result = (rows + others).toMutableList()
+        requests.forEach { result.add(myRequestsIndex(result, tvLibraryId), it) }
+        return result
+    }
+
     fun isPersonal(row: HomeRowConfig): Boolean = row is HomeRowConfig.CustomEndpoint && row.endpoint.startsWith(PREFIX)
 
     /**

@@ -25,16 +25,42 @@ class MyRequests
         private val seerrService: SeerrService,
         private val seerrServerRepository: SeerrServerRepository,
     ) {
-        suspend fun load(limit: Int): List<DiscoverItem> {
+        private class Cached(
+            val seerrUserId: Int,
+            val at: Long,
+            val items: List<DiscoverItem>,
+        )
+
+        @Volatile
+        private var cached: Cached? = null
+
+        /**
+         * Cached for [CACHE_MS] per Seerr user: the row costs a list call plus one details call per
+         * request (through Scuffed to Seerr), so only the first home load in a while pays for it.
+         */
+        suspend fun load(
+            limit: Int,
+            now: Long = android.os.SystemClock.elapsedRealtime(),
+        ): List<DiscoverItem> {
             if (seerrServerRepository.active.firstOrNull() != true) return emptyList()
             // Only the user's own, even for a Seerr account that may see everyone's
             val seerrUserId = seerrServerRepository.currentUserId.firstOrNull() ?: return emptyList()
+            cached
+                ?.takeIf { it.seerrUserId == seerrUserId && now - it.at < CACHE_MS }
+                ?.let { return it.items }
+            return fetch(seerrUserId, limit).also { cached = Cached(seerrUserId, now, it) }
+        }
+
+        private suspend fun fetch(
+            seerrUserId: Int,
+            limit: Int,
+        ): List<DiscoverItem> {
             val requests =
                 seerrService.api.requestApi
                     .requestGet(take = limit, requestedBy = seerrUserId)
                     .results
                     .orEmpty()
-            val semaphore = Semaphore(3)
+            val semaphore = Semaphore(5)
             return coroutineScope {
                 requests
                     .mapNotNull { request ->
@@ -58,5 +84,9 @@ class MyRequests
                     }.awaitAll()
                     .filterNotNull()
             }
+        }
+
+        companion object {
+            const val CACHE_MS = 10 * 60 * 1000L
         }
     }

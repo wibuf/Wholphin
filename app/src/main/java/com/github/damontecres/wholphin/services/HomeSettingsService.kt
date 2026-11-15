@@ -367,13 +367,22 @@ class HomeSettingsService
                             newHomeRows.save(userId, record.copy(offered = record.offered + PersonalRows.OFFER_KEY))
                         }
                     }
-                    PersonalRows.rows().mapIndexed { index, config ->
-                        resolve(libraries.size + 3 + gameRows.size + index, config)
-                    }
+                    PersonalRows.rows()
                 } else {
                     emptyList()
                 }
-            val rowConfig = continueWatchingRow + includedIds + gameRows + personalRows
+            val baseRows = continueWatchingRow + includedIds + gameRows
+            val rowConfig =
+                if (personalRows.isEmpty()) {
+                    baseRows
+                } else {
+                    // My requests above the seasonal library, the rest at the bottom
+                    val tv = libraries.firstOrNull { it.name.equals(TV_LIBRARY, ignoreCase = true) }?.itemId
+                    val byConfig = baseRows.associateBy { it.config }
+                    PersonalRows.withPersonal(baseRows.map { it.config }, personalRows, tv).mapIndexed { index, config ->
+                        byConfig[config] ?: resolve(baseRows.size + index, config)
+                    }
+                }
             return HomePageResolvedSettings(userId, HomePageSettingsSource.DEFAULT, rowConfig)
         }
 
@@ -393,9 +402,9 @@ class HomeSettingsService
                         .getUserViews(userId = userId)
                         .content.items
                         .associate { it.id to it.dateCreated?.toInstant(ZoneOffset.UTC) }
+                val allLibraries = navDrawerService.getAllUserLibraries(userId, userDto?.tvAccess ?: false)
                 val libraries =
-                    navDrawerService
-                        .getAllUserLibraries(userId, userDto?.tvAccess ?: false)
+                    allLibraries
                         .filter { it.collectionType != CollectionType.LIVETV }
                         .map {
                             NewHomeRows.LibraryView(
@@ -411,6 +420,7 @@ class HomeSettingsService
                         gameLibraries = moonbaseGamesService.libraries(),
                         record = newHomeRows.record(userId),
                         personalRows = if (BuildConfig.GOOSEFLIX) PersonalRows.rows() else emptyList(),
+                        tvLibraryId = allLibraries.firstOrNull { it.name.equals(TV_LIBRARY, ignoreCase = true) }?.itemId,
                     )
                 if (plan.changed) {
                     Timber.i("Adding home rows for new libraries: %s", plan.rows - settings.rows.toSet())
@@ -772,6 +782,9 @@ class UnsupportedHomeSettingsVersionException(
     val unsupportedVersion: Int?,
     val maxSupportedVersion: Int = SUPPORTED_HOME_PAGE_SETTINGS_VERSION,
 ) : Exception("Unsupported version $unsupportedVersion, max supported is $maxSupportedVersion")
+
+/** Fork: the GooseFlix TV library's name, which the seasonal library follows (Scuffed's library order) */
+private const val TV_LIBRARY = "TV"
 
 fun getRecentlyAddedTitle(name: String?): StringProvider =
     name?.let { ResArgStringProvider(R.string.recently_added_in, it) }

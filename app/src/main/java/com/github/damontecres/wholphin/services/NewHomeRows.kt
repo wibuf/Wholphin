@@ -118,6 +118,7 @@ class NewHomeRows
                 record: Record,
                 now: Instant = Instant.now(),
                 personalRows: List<HomeRowConfig> = emptyList(),
+                tvLibraryId: UUID? = null,
             ): Plan {
                 val offered = record.offered.toMutableSet()
                 val added = record.added.toMutableSet()
@@ -162,7 +163,9 @@ class NewHomeRows
                     if (result.any { PersonalRows.isPersonal(it) }) {
                         offered += PersonalRows.OFFER_KEY
                     } else if (PersonalRows.OFFER_KEY !in offered) {
-                        result.addAll(personalRows)
+                        val withPersonal = PersonalRows.withPersonal(result, personalRows, tvLibraryId)
+                        result.clear()
+                        result.addAll(withPersonal)
                         offered += PersonalRows.OFFER_KEY
                     }
                 }

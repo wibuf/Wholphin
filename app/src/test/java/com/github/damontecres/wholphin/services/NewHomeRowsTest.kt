@@ -84,15 +84,29 @@ class NewHomeRowsTest {
     @Test
     fun `personal rows go at the bottom once, for existing users too`() {
         val personal = PersonalRows.rows()
-        val first = NewHomeRows.plan(saved, oldLibraries, emptyList(), Record(), now, personalRows = personal)
-        assertEquals(saved + personal, first.rows)
+        val myRequests = personal.last()
+        val first = NewHomeRows.plan(saved, oldLibraries, emptyList(), Record(), now, personalRows = personal, tvLibraryId = tv)
+        // My requests right after TV's row (above where a seasonal library goes), the rest at the bottom
+        assertEquals(saved + myRequests + personal.dropLast(1), first.rows)
         assertTrue(first.changed)
         assertTrue(first.visible.containsAll(personal))
 
         // Removed by the user: they stay removed
-        val removed = NewHomeRows.plan(saved, oldLibraries, emptyList(), first.record, now, personalRows = personal)
+        val removed = NewHomeRows.plan(saved, oldLibraries, emptyList(), first.record, now, personalRows = personal, tvLibraryId = tv)
         assertEquals(saved, removed.rows)
         assertFalse(removed.changed)
+    }
+
+    @Test
+    fun `without a TV row, My requests goes after Continue Watching, else at the top`() {
+        val personal = PersonalRows.rows()
+        val myRequests = personal.last()
+        val noTv = listOf(HomeRowConfig.ContinueWatchingCombined(), row(movies))
+        assertEquals(
+            listOf(noTv[0], myRequests, noTv[1]) + personal.dropLast(1),
+            PersonalRows.withPersonal(noTv, personal, tvLibraryId = null),
+        )
+        assertEquals(listOf(myRequests, row(movies)) + personal.dropLast(1), PersonalRows.withPersonal(listOf(row(movies)), personal, tv))
     }
 
     @Test

@@ -847,7 +847,7 @@ class HomeDataService
     }
 
 /** Fork: how many of the user's requests the My requests row shows */
-private const val MY_REQUESTS_LIMIT = 20
+private const val MY_REQUESTS_LIMIT = 12
 
 private val Library?.itemFields: List<ItemFields>
     get() =
