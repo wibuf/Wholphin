@@ -83,6 +83,7 @@ class HomeDataService
         private val latestNextUpService: LatestNextUpService,
         private val imageUrlService: ImageUrlService,
         private val suggestionService: SuggestionService,
+        private val myRequests: MyRequests,
         private val moonbaseGamesService: MoonbaseGamesService,
         private val gameRecencyStore: GameRecencyStore,
         private val gameArtworkService: GameArtworkService,
@@ -756,6 +757,16 @@ class HomeDataService
          */
         private suspend fun fetchPersonalRow(row: HomeRowConfig.CustomEndpoint): HomeRowLoadingState {
             val empty = Success(StringStringProvider(row.title), emptyList(), row.viewOptions, rowType = row)
+            if (row.endpoint == PersonalRows.MY_REQUESTS) {
+                return try {
+                    HomeRowLoadingState.Requests(StringStringProvider(row.title), myRequests.load(MY_REQUESTS_LIMIT), row.viewOptions)
+                } catch (ex: CancellationException) {
+                    throw ex
+                } catch (ex: Exception) {
+                    Timber.w(ex, "My requests failed")
+                    empty
+                }
+            }
             if (!PersonalRows.available()) return empty
             return try {
                 val response = fetchCustomEndpoint(row)
@@ -834,6 +845,9 @@ class HomeDataService
             }
         }
     }
+
+/** Fork: how many of the user's requests the My requests row shows */
+private const val MY_REQUESTS_LIMIT = 20
 
 private val Library?.itemFields: List<ItemFields>
     get() =

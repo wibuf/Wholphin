@@ -26,6 +26,9 @@ object PersonalRows {
 
     private const val MOOD = "mood"
 
+    /** Not a plugin endpoint: the app fetches the user's own Seerr requests itself ([MyRequests]) */
+    const val MY_REQUESTS = PREFIX + "my-requests"
+
     val UNAVAILABLE_FOR = 30.minutes
 
     /** The personal rows, in their order at the bottom of the home page */
@@ -42,6 +45,7 @@ object PersonalRows {
                     ),
                 )
             }
+            add(HomeRowConfig.CustomEndpoint(endpoint = MY_REQUESTS, title = "My requests"))
         }
 
     fun isPersonal(row: HomeRowConfig): Boolean = row is HomeRowConfig.CustomEndpoint && row.endpoint.startsWith(PREFIX)
@@ -55,13 +59,21 @@ object PersonalRows {
         headerTitle: String?,
         total: Int?,
     ): String {
-        val name = headerTitle?.trim()?.takeIf { it.isNotEmpty() } ?: row.title
+        val name = headerTitle?.let(::decodeHeader)?.trim()?.takeIf { it.isNotEmpty() } ?: row.title
         return if (row.endpoint == PREFIX + MOOD && total != null && total > 0) {
             "$name · $total in your library"
         } else {
             name
         }
     }
+
+    /** The plugin percent-encodes header values (UTF-8), since titles can be non-ASCII */
+    fun decodeHeader(value: String): String =
+        try {
+            java.net.URLDecoder.decode(value.replace("+", "%2B"), Charsets.UTF_8)
+        } catch (ex: IllegalArgumentException) {
+            value
+        }
 
     @Volatile
     private var unavailableUntil = 0L

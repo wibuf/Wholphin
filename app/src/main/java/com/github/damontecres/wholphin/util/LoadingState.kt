@@ -82,6 +82,13 @@ sealed interface HomeRowLoadingState {
         val showViewMore: Boolean = true,
     ) : HomeRowLoadingState
 
+    /** Fork-only (GooseFlix #1636): the user's own Seerr requests, newest first */
+    data class Requests(
+        override val title: StringProvider,
+        val items: List<com.github.damontecres.wholphin.data.model.DiscoverItem>,
+        val viewOptions: HomeRowViewOptions = HomeRowViewOptions(),
+    ) : HomeRowLoadingState
+
     data class Error(
         override val title: StringProvider,
         val message: String? = null,

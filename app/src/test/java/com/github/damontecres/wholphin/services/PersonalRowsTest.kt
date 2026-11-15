@@ -13,8 +13,9 @@ class PersonalRowsTest {
     private val mood = rows.first { it.endpoint.endsWith("mood") }
 
     @Test
-    fun `five rows, all recognised as personal`() {
-        assertEquals(2 + PersonalRows.MOOD_SLOTS, rows.size)
+    fun `six rows, all recognised as personal`() {
+        assertEquals(2 + PersonalRows.MOOD_SLOTS + 1, rows.size)
+        assertEquals(PersonalRows.MY_REQUESTS, rows.last().endpoint)
         assertTrue(rows.all { PersonalRows.isPersonal(it) })
         assertFalse(PersonalRows.isPersonal(HomeRowConfig.CustomEndpoint(endpoint = "/HomeScreen/Section/X", title = "X")))
         assertEquals(listOf("1", "2", "3"), rows.filter { it.endpoint.endsWith("mood") }.map { it.query!!.single().value })
@@ -26,6 +27,10 @@ class PersonalRowsTest {
         assertEquals("Because you watched Inception", PersonalRows.title(picked, " Because you watched Inception ", null))
         assertEquals("Heists & cons · 12 in your library", PersonalRows.title(mood, "Heists & cons", 12))
         assertEquals("Heists & cons", PersonalRows.title(mood, "Heists & cons", 0))
+        // Percent-encoded by the plugin
+        assertEquals("Because you watched Amélie", PersonalRows.title(picked, "Because%20you%20watched%20Am%C3%A9lie", null))
+        assertEquals("Heists & cons · 3 in your library", PersonalRows.title(mood, "Heists%20%26%20cons", 3))
+        assertEquals("C++ stories", PersonalRows.title(picked, "C++ stories", null))
     }
 
     @Test

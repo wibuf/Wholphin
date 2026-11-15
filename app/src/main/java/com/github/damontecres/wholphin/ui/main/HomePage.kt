@@ -437,12 +437,19 @@ fun HomePageContent(
                         row.games.getOrNull(position.column)?.let { row.libraryId to it }
                     }
                 }
+            // Fork (GooseFlix #1636): a focused request gets its own header; requests aren't Jellyfin items
+            val focusedRequest =
+                remember(homeRows, position) {
+                    (homeRows.getOrNull(position.row) as? HomeRowLoadingState.Requests)?.items?.getOrNull(position.column)
+                }
             // The row's current copy of the focused pill, which the minute-by-minute check updates
             val pill = focusedPill?.let { focused -> pills.firstOrNull { it.key == focused.key } ?: focused }
             if (pill != null) {
                 QuickPillHeader(pill, pills, showLogo, HeaderUtils.modifier)
             } else if (focusedGame != null) {
                 GameHomeHeader(focusedGame.first, focusedGame.second, HeaderUtils.modifier)
+            } else if (focusedRequest != null) {
+                RequestHomeHeader(focusedRequest, HeaderUtils.modifier)
             } else {
                 headerComposable.invoke(focusedItem)
             }
@@ -540,6 +547,21 @@ fun HomePageContent(
                                             title = r.title.getString(),
                                             subtitle = stringResource(R.string.no_results),
                                             modifier = rowModifier,
+                                        )
+                                    }
+                                }
+
+                                is HomeRowLoadingState.Requests -> {
+                                    // Fork (GooseFlix #1636): shown only when there are requests
+                                    if (r.items.isNotEmpty()) {
+                                        RequestsHomeRow(
+                                            row = r,
+                                            onFocusPosition = { column -> currentOnFocusPosition(RowColumn(rowIndex, column)) },
+                                            modifier =
+                                                rowModifier
+                                                    .fillMaxWidth()
+                                                    .focusGroup()
+                                                    .focusRequester(rowFocusRequesters[rowIndex]),
                                         )
                                     }
                                 }
