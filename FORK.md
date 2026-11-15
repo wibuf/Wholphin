@@ -91,7 +91,7 @@ Newest first within each area. The numbers are GooseFlix issues unless they say 
 
 ### Video games
 - Native retro game playback from the Moonbase Jellyfin plugin: libretro host in `app/src/main/cpp`, games UI in `games/`.
-- Controllers mapped per port; artwork fetched through a retrying disk cache; a home row and header for each games library.
+- Controllers mapped per port (a device counts as external through `InputDevice.isExternal` on Android 10+, and as "not virtual" before that, where the call doesn't exist); artwork fetched through a retrying disk cache; a home row and header for each games library.
 - Game libraries only show for users who can see that library in Jellyfin. The plugin itself doesn't check permissions.
 
 ### Ratings and details

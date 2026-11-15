@@ -113,7 +113,9 @@ internal object NativeInputDeviceClassifier {
             }
         return NativeInputDeviceTraits(
             isVirtual = device.isVirtual,
-            isExternal = device.isExternal,
+            // InputDevice.isExternal is Android 10+; before that the closest is "not virtual"
+            isExternal =
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) device.isExternal else !device.isVirtual,
             hasGamepadSource = device.supportsSource(InputDevice.SOURCE_GAMEPAD),
             hasJoystickSource = device.supportsSource(InputDevice.SOURCE_JOYSTICK),
             hasKeyboardSource = device.supportsSource(InputDevice.SOURCE_KEYBOARD),
