@@ -144,4 +144,45 @@ class NewHomeRowsTest {
         val plan = NewHomeRows.plan(saved, libraries, emptyList(), Record(), now)
         assertEquals(listOf(saved[0], row(first), row(movies), row(tv)), plan.rows)
     }
+
+    private val recordings = UUID.randomUUID()
+    private val games = UUID.randomUUID()
+
+    @Test
+    fun `Recordings and Video Games stay below the personal rows`() {
+        val personal = PersonalRows.rows()
+        val myRequests = personal.last()
+        val rows = saved + row(games) + row(recordings) + HomeRowConfig.Games("1", "Retro")
+        val plan =
+            NewHomeRows.plan(
+                rows,
+                oldLibraries + library(recordings) + library(games),
+                emptyList(),
+                Record(),
+                now,
+                personalRows = personal,
+                tvLibraryId = tv,
+                bottomLibraryIds = listOf(recordings, games),
+            )
+        assertEquals(
+            saved + myRequests + personal.dropLast(1) + row(recordings) + row(games) + HomeRowConfig.Games("1", "Retro"),
+            plan.rows,
+        )
+        assertTrue(PersonalRows.BOTTOM_KEY in plan.record.offered)
+    }
+
+    @Test
+    fun `homes with the personal rows below Recordings get them moved once`() {
+        val personal = PersonalRows.rows()
+        val firstBuild = saved + row(recordings) + row(games) + personal
+        val libraries = listOf(library(movies), library(tv), library(recordings), library(games))
+        val record = Record(baselined = true, offered = setOf(PersonalRows.OFFER_KEY))
+        val fixed = NewHomeRows.plan(firstBuild, libraries, emptyList(), record, now, personalRows = personal, bottomLibraryIds = listOf(recordings, games))
+        assertEquals(saved + personal + row(recordings) + row(games), fixed.rows)
+
+        // Moved back up by the user afterwards: left alone
+        val userMoved = saved + row(recordings) + personal + row(games)
+        val again = NewHomeRows.plan(userMoved, libraries, emptyList(), fixed.record, now, personalRows = personal, bottomLibraryIds = listOf(recordings, games))
+        assertEquals(userMoved, again.rows)
+    }
 }

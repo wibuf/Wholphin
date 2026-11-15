@@ -68,16 +68,61 @@ object PersonalRows {
         return lastWatching + 1
     }
 
-    /** [rows] plus [personal], My requests placed by [myRequestsIndex] and the rest at the bottom */
+    /**
+     * [rows] plus [personal]: My requests placed by [myRequestsIndex], the rest at the bottom, but
+     * above the rows that always stay last ([withBottomLast]).
+     */
     fun withPersonal(
         rows: List<HomeRowConfig>,
         personal: List<HomeRowConfig>,
         tvLibraryId: java.util.UUID?,
+        bottomLibraryIds: List<java.util.UUID> = emptyList(),
     ): List<HomeRowConfig> {
         val (requests, others) = personal.partition { (it as? HomeRowConfig.CustomEndpoint)?.endpoint == MY_REQUESTS }
         val result = (rows + others).toMutableList()
         requests.forEach { result.add(myRequestsIndex(result, tvLibraryId), it) }
-        return result
+        return withBottomLast(result, bottomLibraryIds)
+    }
+
+    /**
+     * Libraries whose home rows stay at the very bottom, in this order: below the personal rows too.
+     * Matched by name, like the TV library.
+     */
+    val BOTTOM_LIBRARIES = listOf("Recordings", "Video Games")
+
+    /** Moves the bottom rows of an existing home to the end once (GooseFlix #1636) */
+    const val BOTTOM_KEY = "bottom:v1"
+
+    /** The ids of [BOTTOM_LIBRARIES] among [libraries] (id, name), in [BOTTOM_LIBRARIES] order */
+    fun bottomLibraryIds(libraries: List<Pair<java.util.UUID, String?>>): List<java.util.UUID> =
+        BOTTOM_LIBRARIES.mapNotNull { name -> libraries.firstOrNull { it.second.equals(name, ignoreCase = true) }?.first }
+
+    /** Whether [row] is one of the rows that stay last: a bottom library's, or a Moonbase games row */
+    fun isBottom(
+        row: HomeRowConfig,
+        bottomLibraryIds: List<java.util.UUID>,
+    ): Boolean = row is HomeRowConfig.Games || (row is HomeRowConfig.RecentlyAdded && row.parentId in bottomLibraryIds)
+
+    /** [rows] with the bottom rows moved to the end: the libraries' rows in order, then games rows */
+    fun withBottomLast(
+        rows: List<HomeRowConfig>,
+        bottomLibraryIds: List<java.util.UUID>,
+    ): List<HomeRowConfig> {
+        val (bottom, rest) = rows.partition { isBottom(it, bottomLibraryIds) }
+        val ordered =
+            bottom.sortedBy { row ->
+                (row as? HomeRowConfig.RecentlyAdded)?.let { bottomLibraryIds.indexOf(it.parentId) } ?: bottomLibraryIds.size
+            }
+        return rest + ordered
+    }
+
+    /** Whether a personal row sits below a bottom row, as the first personal rows were placed */
+    fun personalBelowBottom(
+        rows: List<HomeRowConfig>,
+        bottomLibraryIds: List<java.util.UUID>,
+    ): Boolean {
+        val firstBottom = rows.indexOfFirst { isBottom(it, bottomLibraryIds) }
+        return firstBottom >= 0 && rows.drop(firstBottom).any { isPersonal(it) }
     }
 
     fun isPersonal(row: HomeRowConfig): Boolean = row is HomeRowConfig.CustomEndpoint && row.endpoint.startsWith(PREFIX)

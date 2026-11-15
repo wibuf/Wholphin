@@ -362,8 +362,8 @@ class HomeSettingsService
             val personalRows =
                 if (BuildConfig.GOOSEFLIX) {
                     newHomeRows.record(userId).let { record ->
-                        if (PersonalRows.OFFER_KEY !in record.offered) {
-                            newHomeRows.save(userId, record.copy(offered = record.offered + PersonalRows.OFFER_KEY))
+                        if (PersonalRows.OFFER_KEY !in record.offered || PersonalRows.BOTTOM_KEY !in record.offered) {
+                            newHomeRows.save(userId, record.copy(offered = record.offered + PersonalRows.OFFER_KEY + PersonalRows.BOTTOM_KEY))
                         }
                     }
                     PersonalRows.rows()
@@ -378,7 +378,8 @@ class HomeSettingsService
                     // My requests above the seasonal library, the rest at the bottom
                     val tv = libraries.firstOrNull { it.name.equals(TV_LIBRARY, ignoreCase = true) }?.itemId
                     val byConfig = baseRows.associateBy { it.config }
-                    PersonalRows.withPersonal(baseRows.map { it.config }, personalRows, tv).mapIndexed { index, config ->
+                    val bottom = PersonalRows.bottomLibraryIds(libraries.map { it.itemId to it.name })
+                    PersonalRows.withPersonal(baseRows.map { it.config }, personalRows, tv, bottom).mapIndexed { index, config ->
                         byConfig[config] ?: resolve(baseRows.size + index, config)
                     }
                 }
@@ -419,6 +420,7 @@ class HomeSettingsService
                         record = newHomeRows.record(userId),
                         personalRows = if (BuildConfig.GOOSEFLIX) PersonalRows.rows() else emptyList(),
                         tvLibraryId = allLibraries.firstOrNull { it.name.equals(TV_LIBRARY, ignoreCase = true) }?.itemId,
+                        bottomLibraryIds = PersonalRows.bottomLibraryIds(allLibraries.map { it.itemId to it.name }),
                     )
                 if (plan.changed) {
                     Timber.i("Adding home rows for new libraries: %s", plan.rows - settings.rows.toSet())

@@ -119,6 +119,7 @@ class NewHomeRows
                 now: Instant = Instant.now(),
                 personalRows: List<HomeRowConfig> = emptyList(),
                 tvLibraryId: UUID? = null,
+                bottomLibraryIds: List<UUID> = emptyList(),
             ): Plan {
                 val offered = record.offered.toMutableSet()
                 val added = record.added.toMutableSet()
@@ -163,10 +164,20 @@ class NewHomeRows
                     if (result.any { PersonalRows.isPersonal(it) }) {
                         offered += PersonalRows.OFFER_KEY
                     } else if (PersonalRows.OFFER_KEY !in offered) {
-                        val withPersonal = PersonalRows.withPersonal(result, personalRows, tvLibraryId)
+                        val withPersonal = PersonalRows.withPersonal(result, personalRows, tvLibraryId, bottomLibraryIds)
                         result.clear()
                         result.addAll(withPersonal)
                         offered += PersonalRows.OFFER_KEY
+                    }
+                    // Once: homes that got the personal rows below Recordings and Video Games (the
+                    // first builds put them at the very end) get those two moved back to the bottom
+                    if (PersonalRows.BOTTOM_KEY !in offered) {
+                        if (PersonalRows.personalBelowBottom(result, bottomLibraryIds)) {
+                            val moved = PersonalRows.withBottomLast(result, bottomLibraryIds)
+                            result.clear()
+                            result.addAll(moved)
+                        }
+                        offered += PersonalRows.BOTTOM_KEY
                     }
                 }
 
