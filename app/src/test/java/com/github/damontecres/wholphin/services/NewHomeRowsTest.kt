@@ -69,9 +69,16 @@ class NewHomeRowsTest {
     }
 
     @Test
-    fun `a user's own rows are never hidden`() {
-        val plan = NewHomeRows.plan(saved, listOf(library(movies)), emptyList(), Record(), now)
-        assertEquals("TV is missing from the views, but the row is the user's own", saved, plan.visible)
+    fun `a user's own row hides while its library is away, and comes back`() {
+        // The Halloween row came with the user's own home setup, not from here; the season ends
+        val own = saved + row(halloween)
+        val off = NewHomeRows.plan(own, oldLibraries, emptyList(), Record(), now)
+        assertEquals("kept in settings", own, off.rows)
+        assertFalse("not shown as a catch-all \"Recently added\"", off.visible.contains(row(halloween)))
+        assertTrue(off.visible.containsAll(saved))
+
+        val on = NewHomeRows.plan(off.rows, withHalloween, emptyList(), off.record, now)
+        assertTrue(on.visible.contains(row(halloween)))
     }
 
     @Test

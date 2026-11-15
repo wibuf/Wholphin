@@ -26,9 +26,11 @@ import javax.inject.Singleton
  * a row missing for one of those was most likely removed on purpose, unless the library is
  * recent ([NEW_LIBRARY_WINDOW_DAYS]).
  *
- * A row added here for a Jellyfin library is hidden, not deleted, while the library is missing
- * from the user's views: Scuffed's seasonal switch and the end of a season both take a library
- * out of the user's views, and switching it back on brings the row back.
+ * Any "Recently added" row whose library is missing from the user's views is hidden, not deleted:
+ * Scuffed's seasonal switch and the end of a season both take a library out of the user's views,
+ * and switching it back on brings the row back. Shown, such a row has no library name to go by
+ * ("Recently added"), and Jellyfin answers for a library the user can't see with the latest from
+ * every library. That covers rows from the user's own home setup too, not just ones added here.
  */
 @Singleton
 class NewHomeRows
@@ -74,7 +76,7 @@ class NewHomeRows
             val rows: List<HomeRowConfig>,
             /** Whether [rows] differs from what was saved */
             val changed: Boolean,
-            /** The rows to show now: [rows] less added rows whose library is away */
+            /** The rows to show now: [rows] less "Recently added" rows whose library is away */
             val visible: List<HomeRowConfig>,
             val record: Record,
         )
@@ -155,9 +157,7 @@ class NewHomeRows
                 val present = libraries.map { it.id.toString() }.toSet()
                 val visible =
                     result.filterNot {
-                        it is HomeRowConfig.RecentlyAdded &&
-                            it.parentId.toString() in added &&
-                            it.parentId.toString() !in present
+                        it is HomeRowConfig.RecentlyAdded && it.parentId.toString() !in present
                     }
                 return Plan(
                     rows = result,

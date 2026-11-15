@@ -71,7 +71,7 @@ Newest first within each area. The numbers are GooseFlix issues unless they say 
   - What's on a channel pill gets real art and details in the background: the show's backdrop, logo and exact episode (title, description, "S10 E4") when it's in the library, otherwise a TMDB backdrop and logo from Scuffed's `/api/gooseflix/art` (#1421).
   - The Guide pill takes focus when the app opens, rather than the nav drawer.
 - Live game pills for the Patriots, Celtics, Bruins and Red Sox, first in the pill row while a game or its pregame is on. They come from Scuffed's `/api/gooseflix/live` (#1427, #1422).
-- Rows for libraries added after the user saved their home settings, placed in library order (`services/NewHomeRows.kt`).
+- Rows for libraries added after the user saved their home settings, placed in library order (`services/NewHomeRows.kt`). Any "Recently added in…" row whose library the user can't currently see (a seasonal library out of season) is hidden but kept, and comes back with the library; shown, it would read just "Recently added" and list the latest from every library.
 - Recently Added shows a single new episode, or a new season, as its show (card, header and click), with a "New episode · S1 E2 · Name" or "New episodes · Season 2" line in the header. Setting: Interface → "Show the series for new episodes", on by default (#1501; `services/NewEpisodeSeries.kt`).
 - First load shows the page as soon as the top row is ready; the rows below show as loading and fill in as each finishes (upstream waits for every row) (`ui/main/HomeFirstLoad.kt`).
 - Defaults: Continue Watching and Next Up as separate rows, no Watch Live row, 50 items per row.
