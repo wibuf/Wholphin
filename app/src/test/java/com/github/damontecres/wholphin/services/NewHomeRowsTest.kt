@@ -82,6 +82,28 @@ class NewHomeRowsTest {
     }
 
     @Test
+    fun `personal rows go at the bottom once, for existing users too`() {
+        val personal = PersonalRows.rows()
+        val first = NewHomeRows.plan(saved, oldLibraries, emptyList(), Record(), now, personalRows = personal)
+        assertEquals(saved + personal, first.rows)
+        assertTrue(first.changed)
+        assertTrue(first.visible.containsAll(personal))
+
+        // Removed by the user: they stay removed
+        val removed = NewHomeRows.plan(saved, oldLibraries, emptyList(), first.record, now, personalRows = personal)
+        assertEquals(saved, removed.rows)
+        assertFalse(removed.changed)
+    }
+
+    @Test
+    fun `personal rows already there are not added twice`() {
+        val personal = PersonalRows.rows()
+        val plan = NewHomeRows.plan(saved + personal.take(1), oldLibraries, emptyList(), Record(), now, personalRows = personal)
+        assertEquals(saved + personal.take(1), plan.rows)
+        assertTrue(PersonalRows.OFFER_KEY in plan.record.offered)
+    }
+
+    @Test
     fun `libraries added after the first run are offered whatever their age`() {
         val first = NewHomeRows.plan(saved, oldLibraries, emptyList(), Record(), now)
         assertFalse(first.changed)

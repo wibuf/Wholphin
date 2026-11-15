@@ -71,6 +71,8 @@ class UserSwitchListener
                 // the home page would otherwise fetch the old rows with the new user's sign-in,
                 // eg another person's "Recently added in Movies" on an account without Movies.
                 homeSettingsService.currentSettings.value = HomePageResolvedSettings.EMPTY
+                // Fork: ask the new user's server for the personal rows afresh (GooseFlix #1636)
+                PersonalRows.reset()
                 // Check if plugin is installed, then for home settings & seerr settings
                 launchIO {
                     val serverPluginInstalled =

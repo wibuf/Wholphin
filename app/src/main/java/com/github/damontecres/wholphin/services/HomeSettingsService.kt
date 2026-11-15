@@ -358,7 +358,22 @@ class HomeSettingsService
                         config = HomeRowConfig.Games(library.id, library.name),
                     )
                 }
-            val rowConfig = continueWatchingRow + includedIds + gameRows
+            // Fork (GooseFlix #1636): the personal rows at the bottom. Recorded as offered, so a user
+            // who removes them after saving their own home settings doesn't get them back.
+            val personalRows =
+                if (BuildConfig.GOOSEFLIX) {
+                    newHomeRows.record(userId).let { record ->
+                        if (PersonalRows.OFFER_KEY !in record.offered) {
+                            newHomeRows.save(userId, record.copy(offered = record.offered + PersonalRows.OFFER_KEY))
+                        }
+                    }
+                    PersonalRows.rows().mapIndexed { index, config ->
+                        resolve(libraries.size + 3 + gameRows.size + index, config)
+                    }
+                } else {
+                    emptyList()
+                }
+            val rowConfig = continueWatchingRow + includedIds + gameRows + personalRows
             return HomePageResolvedSettings(userId, HomePageSettingsSource.DEFAULT, rowConfig)
         }
 
@@ -395,6 +410,7 @@ class HomeSettingsService
                         libraries = libraries,
                         gameLibraries = moonbaseGamesService.libraries(),
                         record = newHomeRows.record(userId),
+                        personalRows = if (BuildConfig.GOOSEFLIX) PersonalRows.rows() else emptyList(),
                     )
                 if (plan.changed) {
                     Timber.i("Adding home rows for new libraries: %s", plan.rows - settings.rows.toSet())

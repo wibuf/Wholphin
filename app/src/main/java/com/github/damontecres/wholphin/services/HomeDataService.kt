@@ -1,6 +1,7 @@
 package com.github.damontecres.wholphin.services
 
 import androidx.core.net.toUri
+import com.github.damontecres.wholphin.BuildConfig
 import com.github.damontecres.wholphin.R
 import com.github.damontecres.wholphin.data.ServerRepository
 import com.github.damontecres.wholphin.data.model.BaseItem
@@ -732,19 +733,61 @@ class HomeDataService
 
                 is HomeRowConfig.CustomEndpoint -> {
                     val title = StringStringProvider(row.title)
-                    try {
-                        val items =
-                            fetchCustomEndpointItems(row)
-                                .map { BaseItem(it, row.viewOptions.useSeries) }
-                        Success(title, items, row.viewOptions, rowType = row)
-                    } catch (ex: Exception) {
-                        Timber.w(ex, "Custom endpoint %s failed", row.endpoint)
-                        HomeRowLoadingState.Error(title, exception = ex)
+                    if (BuildConfig.GOOSEFLIX && PersonalRows.isPersonal(row)) {
+                        fetchPersonalRow(row)
+                    } else {
+                        try {
+                            val items =
+                                fetchCustomEndpointItems(row)
+                                    .map { BaseItem(it, row.viewOptions.useSeries) }
+                            Success(title, items, row.viewOptions, rowType = row)
+                        } catch (ex: Exception) {
+                            Timber.w(ex, "Custom endpoint %s failed", row.endpoint)
+                            HomeRowLoadingState.Error(title, exception = ex)
+                        }
                     }
                 }
             }
 
-        private suspend fun fetchCustomEndpointItems(row: HomeRowConfig.CustomEndpoint): List<BaseItemDto> {
+        /**
+         * Fork-only (GooseFlix #1636): a personal row from the GooseFlix server plugin. Whatever goes
+         * wrong (no plugin, upstream's plugin, a server error), the row comes back empty, which keeps
+         * it off the home page: the app works the same without the plugin.
+         */
+        private suspend fun fetchPersonalRow(row: HomeRowConfig.CustomEndpoint): HomeRowLoadingState {
+            val empty = Success(StringStringProvider(row.title), emptyList(), row.viewOptions, rowType = row)
+            if (!PersonalRows.available()) return empty
+            return try {
+                val response = fetchCustomEndpoint(row)
+                Success(
+                    StringStringProvider(PersonalRows.title(row, response.headerTitle, response.total)),
+                    response.items.map { BaseItem(it, row.viewOptions.useSeries) },
+                    row.viewOptions,
+                    rowType = row,
+                )
+            } catch (ex: CancellationException) {
+                throw ex
+            } catch (ex: InvalidStatusException) {
+                // 404: the plugin isn't installed, or it's upstream's without these endpoints
+                if (ex.status == 404) PersonalRows.markUnavailable()
+                Timber.i("Personal row %s unavailable: HTTP %s", row.endpoint, ex.status)
+                empty
+            } catch (ex: Exception) {
+                Timber.w(ex, "Personal row %s failed", row.endpoint)
+                empty
+            }
+        }
+
+        /** Fork: a custom endpoint's items plus what personal rows read from the response */
+        private class CustomEndpointResponse(
+            val items: List<BaseItemDto>,
+            val total: Int?,
+            val headerTitle: String?,
+        )
+
+        private suspend fun fetchCustomEndpointItems(row: HomeRowConfig.CustomEndpoint): List<BaseItemDto> = fetchCustomEndpoint(row).items
+
+        private suspend fun fetchCustomEndpoint(row: HomeRowConfig.CustomEndpoint): CustomEndpointResponse {
             val base =
                 api.baseUrl?.toHttpUrlOrNull()
                     ?: throw IllegalStateException("Jellyfin baseUrl not set")
@@ -787,7 +830,7 @@ class HomeDataService
                 val queryResult =
                     HomeSettingsService.jsonParser.decodeFromStream<BaseItemDtoQueryResult>(it.body.byteStream())
                 Timber.v("Got %s items from custom endpoint", queryResult.items.size)
-                queryResult.items
+                CustomEndpointResponse(queryResult.items, queryResult.totalRecordCount, it.header(PersonalRows.TITLE_HEADER))
             }
         }
     }

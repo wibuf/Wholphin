@@ -117,6 +117,7 @@ class NewHomeRows
                 gameLibraries: List<GameLibrary>,
                 record: Record,
                 now: Instant = Instant.now(),
+                personalRows: List<HomeRowConfig> = emptyList(),
             ): Plan {
                 val offered = record.offered.toMutableSet()
                 val added = record.added.toMutableSet()
@@ -152,6 +153,18 @@ class NewHomeRows
                     if (key in offered) continue
                     offered += key
                     result.add(HomeRowConfig.Games(library.id, library.name))
+                }
+
+                // GooseFlix #1636: the personal rows go at the bottom once, for existing users too
+                // (unlike libraries, there's no baseline: nobody has had them before). Someone who
+                // removes them doesn't get them back.
+                if (personalRows.isNotEmpty()) {
+                    if (result.any { PersonalRows.isPersonal(it) }) {
+                        offered += PersonalRows.OFFER_KEY
+                    } else if (PersonalRows.OFFER_KEY !in offered) {
+                        result.addAll(personalRows)
+                        offered += PersonalRows.OFFER_KEY
+                    }
                 }
 
                 val present = libraries.map { it.id.toString() }.toSet()
