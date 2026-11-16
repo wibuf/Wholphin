@@ -199,7 +199,7 @@ class HomeSettingsService
                     if (resolvedSource == HomePageSettingsSource.DEFAULT) {
                         settings.rows
                     } else {
-                        withNewLibraryRows(userId, settings)
+                        withNewLibraryRows(userId, settings, resolvedSource)
                     }
                 val resolvedRows =
                     rows.mapIndexed { index, config ->
@@ -395,6 +395,7 @@ class HomeSettingsService
         private suspend fun withNewLibraryRows(
             userId: UUID,
             settings: HomePageSettings,
+            source: HomePageSettingsSource,
         ): List<HomeRowConfig> =
             try {
                 val userDto = serverRepository.currentUserDto?.takeIf { it.id == userId }
@@ -425,7 +426,36 @@ class HomeSettingsService
                     )
                 if (plan.changed) {
                     Timber.i("Adding home rows for new libraries: %s", plan.rows - settings.rows.toSet())
-                    saveToLocal(userId, settings.copy(rows = plan.rows))
+                    val updated = settings.copy(rows = plan.rows)
+                    // Save where the settings were read from: saved only on the device, a layout
+                    // kept on the server would load without the new rows next time, and the
+                    // record would say they'd been added (GooseFlix, 2026-11-16)
+                    val saved =
+                        when (source) {
+                            HomePageSettingsSource.LOCAL -> {
+                                saveToLocal(userId, updated)
+                                true
+                            }
+
+                            HomePageSettingsSource.SERVER_PROFILE -> {
+                                try {
+                                    saveToServer(userId, updated)
+                                    true
+                                } catch (ex: CancellationException) {
+                                    throw ex
+                                } catch (ex: Exception) {
+                                    Timber.w(ex, "Could not save the new home rows to the server")
+                                    false
+                                }
+                            }
+
+                            // The server plugin's or the web client's layout isn't the app's to
+                            // rewrite: show the new rows, and add them again on every load
+                            else -> {
+                                false
+                            }
+                        }
+                    if (!saved) return plan.visible
                 }
                 newHomeRows.save(userId, plan.record)
                 plan.visible

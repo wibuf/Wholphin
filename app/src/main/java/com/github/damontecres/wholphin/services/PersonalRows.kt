@@ -26,7 +26,9 @@ object PersonalRows {
      * Rows added after [OFFER_KEY] (the movie and show "Because you watched", moods 4 to 6): given
      * once to homes that still have the rows they extend ([withNewPersonalRows])
      */
-    const val OFFER_V2 = "personal:v2"
+    // "personal:v2" was recorded by builds that saved the new rows only on the device, so layouts
+    // kept on the server never got them: this key gives them the rows again
+    const val OFFER_V2 = "personal:v2b"
 
     /** Mood slots the app asks for; a slot the plugin has no mood for today is empty and hidden */
     const val MOOD_SLOTS = 6
@@ -190,7 +192,8 @@ object PersonalRows {
     val BOTTOM_LIBRARIES = listOf("Recordings", "Video Games")
 
     /** Moves the bottom rows of an existing home to the end once (GooseFlix #1636) */
-    const val BOTTOM_KEY = "bottom:v1"
+    // "bottom:v1" had the same problem as OFFER_V2's first key
+    const val BOTTOM_KEY = "bottom:v2"
 
     /** The ids of [BOTTOM_LIBRARIES] among [libraries] (id, name), in [BOTTOM_LIBRARIES] order */
     fun bottomLibraryIds(libraries: List<Pair<java.util.UUID, String?>>): List<java.util.UUID> =
