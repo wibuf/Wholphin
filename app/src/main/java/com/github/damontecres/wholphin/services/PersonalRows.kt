@@ -106,6 +106,35 @@ object PersonalRows {
         return result
     }
 
+    /** The source title's TMDB id, which the "Because you watched" rows send */
+    const val SOURCE_TMDB_HEADER = "X-GooseFlix-Source-Tmdb"
+
+    /**
+     * One card per title. A movie that's in two libraries (eg Movies and 4K) comes back from the
+     * plugin once per copy; the first copy, highest in the row, stays. A title counts as the same
+     * when its type and TMDB id match (else IMDb id, else name and year). Copies of the title a
+     * "Because you watched" row is built from ([sourceTmdb]) are dropped too.
+     */
+    fun distinctTitles(
+        items: List<org.jellyfin.sdk.model.api.BaseItemDto>,
+        sourceTmdb: String? = null,
+    ): List<org.jellyfin.sdk.model.api.BaseItemDto> {
+        val seen = HashSet<String>()
+        return items.filter { item ->
+            val ids = item.providerIds.orEmpty()
+            val tmdb = ids.entries.firstOrNull { it.key.equals("Tmdb", ignoreCase = true) }?.value?.takeIf { it.isNotBlank() }
+            val imdb = ids.entries.firstOrNull { it.key.equals("Imdb", ignoreCase = true) }?.value?.takeIf { it.isNotBlank() }
+            if (sourceTmdb != null && tmdb == sourceTmdb) return@filter false
+            val key =
+                "${item.type}:" + (
+                    tmdb?.let { "tmdb:$it" }
+                        ?: imdb?.let { "imdb:$it" }
+                        ?: "name:${item.name?.trim()?.lowercase()}:${item.productionYear}"
+                )
+            seen.add(key)
+        }
+    }
+
     private val _disliked = kotlinx.coroutines.flow.MutableStateFlow<Set<java.util.UUID>>(emptySet())
 
     /**

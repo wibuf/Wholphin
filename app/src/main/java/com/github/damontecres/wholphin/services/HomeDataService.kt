@@ -779,7 +779,8 @@ class HomeDataService
                 val disliked = PersonalRows.disliked.value
                 Success(
                     StringStringProvider(PersonalRows.title(row, response.headerTitle, response.total)),
-                    response.items
+                    PersonalRows
+                        .distinctTitles(response.items, response.sourceTmdb)
                         .filterNot { it.userData?.likes == false || it.id in disliked }
                         .map { BaseItem(it, row.viewOptions.useSeries) },
                     row.viewOptions,
@@ -815,6 +816,7 @@ class HomeDataService
             val total: Int?,
             val headerTitle: String?,
             val kind: String? = null,
+            val sourceTmdb: String? = null,
         )
 
         private suspend fun fetchCustomEndpointItems(row: HomeRowConfig.CustomEndpoint): List<BaseItemDto> = fetchCustomEndpoint(row).items
@@ -867,6 +869,7 @@ class HomeDataService
                     queryResult.totalRecordCount,
                     it.header(PersonalRows.TITLE_HEADER),
                     it.header(PersonalRows.KIND_HEADER),
+                    it.header(PersonalRows.SOURCE_TMDB_HEADER),
                 )
             }
         }

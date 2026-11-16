@@ -44,4 +44,43 @@ class PersonalRowsTest {
         PersonalRows.reset()
         assertTrue(PersonalRows.available(now = 1_000))
     }
+
+    private fun dto(
+        name: String,
+        type: org.jellyfin.sdk.model.api.BaseItemKind = org.jellyfin.sdk.model.api.BaseItemKind.MOVIE,
+        tmdb: String? = null,
+        imdb: String? = null,
+        year: Int? = null,
+    ) = org.jellyfin.sdk.model.api.BaseItemDto(
+        id = java.util.UUID.randomUUID(),
+        type = type,
+        name = name,
+        productionYear = year,
+        providerIds = listOfNotNull(tmdb?.let { "Tmdb" to it }, imdb?.let { "Imdb" to it }).toMap(),
+    )
+
+    @Test
+    fun `a title in two libraries shows once, the first copy`() {
+        val movies = dto("Interstellar", tmdb = "157336")
+        val fourK = dto("Interstellar", tmdb = "157336")
+        val dunkirk = dto("Dunkirk", tmdb = "374720")
+        assertEquals(listOf(movies, dunkirk), PersonalRows.distinctTitles(listOf(movies, dunkirk, fourK)))
+    }
+
+    @Test
+    fun `without ids, name and year decide, and a movie and a show may share a name`() {
+        val a = dto("The Office", year = 2005)
+        val b = dto("The Office", year = 2005)
+        val show = dto("The Office", type = org.jellyfin.sdk.model.api.BaseItemKind.SERIES, year = 2005)
+        val imdbOnly = dto("Heat", imdb = "tt0113277")
+        val imdbAgain = dto("Heat", imdb = "tt0113277")
+        assertEquals(listOf(a, show, imdbOnly), PersonalRows.distinctTitles(listOf(a, b, show, imdbOnly, imdbAgain)))
+    }
+
+    @Test
+    fun `copies of the title a Because you watched row is built from are dropped`() {
+        val odyssey = dto("The Odyssey", tmdb = "1")
+        val other = dto("Troy", tmdb = "2")
+        assertEquals(listOf(other), PersonalRows.distinctTitles(listOf(odyssey, other), sourceTmdb = "1"))
+    }
 }
