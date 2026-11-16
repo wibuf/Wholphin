@@ -183,6 +183,10 @@ fun HomePage(
                                     ),
                                 canRemoveContinueWatching = canRemoveContinueWatching,
                                 canRemoveNextUp = canRemoveNextUp,
+                                canDontRecommend =
+                                    BuildConfig.GOOSEFLIX &&
+                                        (row?.rowType as? HomeRowConfig.CustomEndpoint)
+                                            ?.let(com.github.damontecres.wholphin.services.PersonalRows::isPersonal) == true,
                                 actions =
                                     ContextMenuActions(
                                         navigateTo = viewModel.navigationManager::navigateTo,
@@ -207,6 +211,7 @@ fun HomePage(
                                         },
                                         onClearChosenStreams = {},
                                         onClickRemoveFromNextUp = viewModel::removeFromNextUp,
+                                        onClickDontRecommend = viewModel::dontRecommend,
                                     ),
                             )
                     }

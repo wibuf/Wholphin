@@ -13,12 +13,12 @@ class PersonalRowsTest {
     private val mood = rows.first { it.endpoint.endsWith("mood") }
 
     @Test
-    fun `six rows, all recognised as personal`() {
-        assertEquals(2 + PersonalRows.MOOD_SLOTS + 1, rows.size)
+    fun `every personal row is recognised as personal`() {
+        assertEquals(1 + 3 + PersonalRows.MOOD_SLOTS + 1, rows.size)
         assertEquals(PersonalRows.MY_REQUESTS, rows.last().endpoint)
         assertTrue(rows.all { PersonalRows.isPersonal(it) })
         assertFalse(PersonalRows.isPersonal(HomeRowConfig.CustomEndpoint(endpoint = "/HomeScreen/Section/X", title = "X")))
-        assertEquals(listOf("1", "2", "3"), rows.filter { it.endpoint.endsWith("mood") }.map { it.query!!.single().value })
+        assertEquals(listOf("1", "2", "3", "4", "5", "6"), rows.filter { it.endpoint.endsWith("mood") }.map { it.query!!.single().value })
     }
 
     @Test

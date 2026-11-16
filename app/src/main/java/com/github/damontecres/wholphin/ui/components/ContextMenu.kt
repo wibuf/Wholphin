@@ -5,6 +5,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowForward
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.PlayArrow
@@ -50,6 +51,8 @@ sealed interface ContextMenu {
         val canRemoveNextUp: Boolean,
         val actions: ContextMenuActions,
         val showRemoveFromPlaylist: Boolean = false,
+        // Fork (GooseFlix #1636): "Don't recommend", on the personal home rows
+        val canDontRecommend: Boolean = false,
     ) : ContextMenu
 
     data class ForPerson(
@@ -96,6 +99,7 @@ data class ContextMenuActions(
     val onClickRemoveFromNextUp: (BaseItem) -> Unit = {},
     val onClickAddToQueue: (BaseItem) -> Unit = {},
     val onRemoveFromPlaylist: (Int, UUID) -> Unit = { _, _ -> },
+    val onClickDontRecommend: (BaseItem) -> Unit = {},
 )
 
 data class PersonContextActions(
@@ -536,6 +540,17 @@ private fun buildContextMenuItems(
                     dismissOnClick = true,
                 ) {
                     actions.onClickRemoveFromNextUp.invoke(item)
+                },
+            )
+        }
+        if (contextMenu.canDontRecommend) {
+            add(
+                DialogItem(
+                    text = "Don't recommend",
+                    icon = Icons.Default.Close,
+                    dismissOnClick = true,
+                ) {
+                    actions.onClickDontRecommend.invoke(item)
                 },
             )
         }

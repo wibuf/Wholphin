@@ -185,4 +185,43 @@ class NewHomeRowsTest {
         val again = NewHomeRows.plan(userMoved, libraries, emptyList(), fixed.record, now, personalRows = personal, bottomLibraryIds = listOf(recordings, games))
         assertEquals(userMoved, again.rows)
     }
+
+    @Test
+    fun `homes with the first personal rows get the movie and show rows and moods 4 to 6 once`() {
+        val all = PersonalRows.rows()
+        fun endpoint(row: HomeRowConfig) = row as HomeRowConfig.CustomEndpoint
+        val byw = all.filter { endpoint(it).endpoint == PersonalRows.BECAUSE_YOU_WATCHED }
+        val moods = all.filter { endpoint(it).endpoint.endsWith("/mood") }
+        val anyByw = byw.single { PersonalRows.kindOf(endpoint(it)) == null }
+        val picked = all.first()
+        val myRequests = all.last()
+        // What 0.1.1.500-era builds gave: picked, the one Because you watched, three moods, My requests
+        val v1 = listOf(picked, anyByw) + moods.take(3) + myRequests
+        val record = Record(baselined = true, offered = setOf(PersonalRows.OFFER_KEY, PersonalRows.BOTTOM_KEY))
+        val libraries = listOf(library(movies), library(tv))
+        val plan = NewHomeRows.plan(saved + v1, libraries, emptyList(), record, now, personalRows = all)
+        assertEquals(saved + listOf(picked) + byw + moods + myRequests, plan.rows)
+        assertTrue(PersonalRows.OFFER_V2 in plan.record.offered)
+
+        // Removed again afterwards: not added back
+        val trimmed = saved + listOf(picked, anyByw) + moods.take(3) + myRequests
+        val again = NewHomeRows.plan(trimmed, libraries, emptyList(), plan.record, now, personalRows = all)
+        assertEquals(trimmed, again.rows)
+    }
+
+    @Test
+    fun `new personal rows only join rows the user kept`() {
+        val all = PersonalRows.rows()
+        val picked = all.first()
+        // No Because you watched and no moods left: nothing new
+        assertEquals(listOf(picked), PersonalRows.withNewPersonalRows(listOf(picked), all))
+    }
+
+    @Test
+    fun `the personal rows are picked, three Because you watched, six moods, My requests`() {
+        val rows = PersonalRows.rows().map { it as HomeRowConfig.CustomEndpoint }
+        assertEquals(11, rows.size)
+        assertEquals(listOf("movie", "series", null), rows.filter { it.endpoint == PersonalRows.BECAUSE_YOU_WATCHED }.map(PersonalRows::kindOf))
+        assertEquals((1..6).map { it.toString() }, rows.filter { it.endpoint.endsWith("/mood") }.map { r -> r.query!!.single().value })
+    }
 }

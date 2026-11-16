@@ -360,6 +360,38 @@ class HomeViewModel
             appPreferences: AppPreferences,
         ): Boolean = mediaManagementService.canDelete(item, appPreferences)
 
+        /**
+         * Fork (GooseFlix #1636): "Don't recommend" on a personal row: dislikes the title for this
+         * user and takes it out of every personal row on the page now.
+         */
+        fun dontRecommend(item: BaseItem) {
+            viewModelScope.launchIO {
+                try {
+                    homeDataService.dontRecommend(item.id)
+                } catch (ex: CancellationException) {
+                    throw ex
+                } catch (ex: Exception) {
+                    Timber.w(ex, "Could not dislike %s", item.id)
+                    return@launchIO
+                }
+                _state.update { state ->
+                    state.copy(
+                        homeRows =
+                            state.homeRows.map { row ->
+                                val type = (row as? HomeRowLoadingState.Success)?.rowType as? HomeRowConfig.CustomEndpoint
+                                if (row is HomeRowLoadingState.Success && type != null &&
+                                    com.github.damontecres.wholphin.services.PersonalRows.isPersonal(type)
+                                ) {
+                                    row.copy(items = row.items.filterNot { it?.id == item.id })
+                                } else {
+                                    row
+                                }
+                            },
+                    )
+                }
+            }
+        }
+
         fun removeFromNextUp(item: BaseItem) {
             if (item.type == BaseItemKind.EPISODE) {
                 viewModelScope.launchDefault {

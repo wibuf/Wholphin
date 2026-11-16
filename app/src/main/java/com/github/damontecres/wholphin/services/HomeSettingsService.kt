@@ -362,8 +362,9 @@ class HomeSettingsService
             val personalRows =
                 if (BuildConfig.GOOSEFLIX) {
                     newHomeRows.record(userId).let { record ->
-                        if (PersonalRows.OFFER_KEY !in record.offered || PersonalRows.BOTTOM_KEY !in record.offered) {
-                            newHomeRows.save(userId, record.copy(offered = record.offered + PersonalRows.OFFER_KEY + PersonalRows.BOTTOM_KEY))
+                        val keys = setOf(PersonalRows.OFFER_KEY, PersonalRows.OFFER_V2, PersonalRows.BOTTOM_KEY)
+                        if (!record.offered.containsAll(keys)) {
+                            newHomeRows.save(userId, record.copy(offered = record.offered + keys))
                         }
                     }
                     PersonalRows.rows()

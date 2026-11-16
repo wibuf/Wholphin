@@ -22,9 +22,28 @@ object PersonalRows {
     /** Remembered in [NewHomeRows.Record.offered] once a user has been given these rows */
     const val OFFER_KEY = "personal:v1"
 
-    const val MOOD_SLOTS = 3
+    /**
+     * Rows added after [OFFER_KEY] (the movie and show "Because you watched", moods 4 to 6): given
+     * once to homes that still have the rows they extend ([withNewPersonalRows])
+     */
+    const val OFFER_V2 = "personal:v2"
+
+    /** Mood slots the app asks for; a slot the plugin has no mood for today is empty and hidden */
+    const val MOOD_SLOTS = 6
 
     private const val MOOD = "mood"
+
+    const val BECAUSE_YOU_WATCHED = PREFIX + "because-you-watched"
+
+    /**
+     * Which "Because you watched" row the plugin answered for. A plugin from before the movie and
+     * show rows (0.1.1.500) ignores the kind and sends no such header, and would send the
+     * "anything" row three times, so a kind row without it is treated as empty.
+     */
+    const val KIND_HEADER = "X-GooseFlix-Row-Kind"
+
+    /** The "Because you watched" row's kind (`movie`, `series`), or null for the one from anything */
+    fun kindOf(row: HomeRowConfig.CustomEndpoint): String? = row.query?.firstOrNull { it.key == "kind" }?.value
 
     /** Not a plugin endpoint: the app fetches the user's own Seerr requests itself ([MyRequests]) */
     const val MY_REQUESTS = PREFIX + "my-requests"
@@ -35,7 +54,9 @@ object PersonalRows {
     fun rows(): List<HomeRowConfig> =
         buildList {
             add(HomeRowConfig.CustomEndpoint(endpoint = PREFIX + "picked-for-you", title = "Picked for you"))
-            add(HomeRowConfig.CustomEndpoint(endpoint = PREFIX + "because-you-watched", title = "Because you watched"))
+            add(becauseYouWatched("movie", "Because you watched (movies)"))
+            add(becauseYouWatched("series", "Because you watched (shows)"))
+            add(becauseYouWatched(null, "Because you watched"))
             for (slot in 1..MOOD_SLOTS) {
                 add(
                     HomeRowConfig.CustomEndpoint(
@@ -47,6 +68,55 @@ object PersonalRows {
             }
             add(HomeRowConfig.CustomEndpoint(endpoint = MY_REQUESTS, title = "My requests"))
         }
+
+    private fun becauseYouWatched(
+        kind: String?,
+        title: String,
+    ) = HomeRowConfig.CustomEndpoint(
+        endpoint = BECAUSE_YOU_WATCHED,
+        title = title,
+        query = kind?.let { listOf(KeyValueEntry("kind", it)) },
+    )
+
+    /**
+     * [rows] plus the personal rows added since [OFFER_KEY] that it lacks: the movie and show
+     * "Because you watched" before the user's own (the one from anything), moods 4 to 6 after their
+     * last mood. Only where the user still has that kind of row: someone who removed every mood
+     * row doesn't get three new ones.
+     */
+    fun withNewPersonalRows(
+        rows: List<HomeRowConfig>,
+        personal: List<HomeRowConfig>,
+    ): List<HomeRowConfig> {
+        val result = rows.toMutableList()
+        for (row in personal) {
+            if (row !is HomeRowConfig.CustomEndpoint || row in result) continue
+            when {
+                row.endpoint == BECAUSE_YOU_WATCHED && kindOf(row) != null -> {
+                    val first = result.indexOfFirst { it is HomeRowConfig.CustomEndpoint && it.endpoint == BECAUSE_YOU_WATCHED && kindOf(it) == null }
+                    if (first >= 0) result.add(first, row)
+                }
+
+                row.endpoint == PREFIX + MOOD -> {
+                    val last = result.indexOfLast { it is HomeRowConfig.CustomEndpoint && it.endpoint == PREFIX + MOOD }
+                    if (last >= 0) result.add(last + 1, row)
+                }
+            }
+        }
+        return result
+    }
+
+    private val _disliked = kotlinx.coroutines.flow.MutableStateFlow<Set<java.util.UUID>>(emptySet())
+
+    /**
+     * Titles marked "Don't recommend" on this device since the app started. The plugin leaves
+     * disliked titles out itself (0.1.1.501); this hides them at once, and from an older plugin.
+     */
+    val disliked: kotlinx.coroutines.flow.StateFlow<Set<java.util.UUID>> = _disliked
+
+    fun markDisliked(itemId: java.util.UUID) {
+        _disliked.value = _disliked.value + itemId
+    }
 
     /**
      * Where My requests goes (owner, 2026-11-15): above the seasonal library, ie right after the TV

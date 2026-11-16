@@ -771,9 +771,17 @@ class HomeDataService
             if (!PersonalRows.available()) return empty
             return try {
                 val response = fetchCustomEndpoint(row)
+                // A movie or show "Because you watched" from a plugin without them is the "anything"
+                // row again: leave it empty (see PersonalRows.KIND_HEADER)
+                if (row.endpoint == PersonalRows.BECAUSE_YOU_WATCHED && PersonalRows.kindOf(row) != null && response.kind == null) {
+                    return empty
+                }
+                val disliked = PersonalRows.disliked.value
                 Success(
                     StringStringProvider(PersonalRows.title(row, response.headerTitle, response.total)),
-                    response.items.map { BaseItem(it, row.viewOptions.useSeries) },
+                    response.items
+                        .filterNot { it.userData?.likes == false || it.id in disliked }
+                        .map { BaseItem(it, row.viewOptions.useSeries) },
                     row.viewOptions,
                     rowType = row,
                 )
@@ -791,11 +799,22 @@ class HomeDataService
             }
         }
 
+        /**
+         * Fork (GooseFlix #1636): "Don't recommend" on a personal row. Marks the title disliked for
+         * this user in Jellyfin (its own per-user like/dislike, so it holds on every device), which
+         * the plugin leaves out of every personal row.
+         */
+        suspend fun dontRecommend(itemId: java.util.UUID) {
+            api.userLibraryApi.updateUserItemRating(itemId = itemId, likes = false)
+            PersonalRows.markDisliked(itemId)
+        }
+
         /** Fork: a custom endpoint's items plus what personal rows read from the response */
         private class CustomEndpointResponse(
             val items: List<BaseItemDto>,
             val total: Int?,
             val headerTitle: String?,
+            val kind: String? = null,
         )
 
         private suspend fun fetchCustomEndpointItems(row: HomeRowConfig.CustomEndpoint): List<BaseItemDto> = fetchCustomEndpoint(row).items
@@ -843,13 +862,18 @@ class HomeDataService
                 val queryResult =
                     HomeSettingsService.jsonParser.decodeFromStream<BaseItemDtoQueryResult>(it.body.byteStream())
                 Timber.v("Got %s items from custom endpoint", queryResult.items.size)
-                CustomEndpointResponse(queryResult.items, queryResult.totalRecordCount, it.header(PersonalRows.TITLE_HEADER))
+                CustomEndpointResponse(
+                    queryResult.items,
+                    queryResult.totalRecordCount,
+                    it.header(PersonalRows.TITLE_HEADER),
+                    it.header(PersonalRows.KIND_HEADER),
+                )
             }
         }
     }
 
 /** Fork: how many of the user's requests the My requests row shows */
-private const val MY_REQUESTS_LIMIT = 8
+private const val MY_REQUESTS_LIMIT = 30
 
 private val Library?.itemFields: List<ItemFields>
     get() =

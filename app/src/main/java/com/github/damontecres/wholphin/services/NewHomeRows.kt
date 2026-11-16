@@ -169,6 +169,14 @@ class NewHomeRows
                         result.addAll(withPersonal)
                         offered += PersonalRows.OFFER_KEY
                     }
+                    // Once: homes that have the personal rows get the ones added since (the movie and
+                    // show "Because you watched", moods 4 to 6) next to their own
+                    if (PersonalRows.OFFER_V2 !in offered) {
+                        val withNew = PersonalRows.withNewPersonalRows(result, personalRows)
+                        result.clear()
+                        result.addAll(withNew)
+                        offered += PersonalRows.OFFER_V2
+                    }
                     // Once: homes that got the personal rows below Recordings and Video Games (the
                     // first builds put them at the very end) get those two moved back to the bottom
                     if (PersonalRows.BOTTOM_KEY !in offered) {
