@@ -188,7 +188,7 @@ class HomeViewModel
                     )
                 }
 
-                val semaphore = Semaphore(4)
+                val semaphore = Semaphore(if (BuildConfig.GOOSEFLIX) HomeFirstLoad.CONCURRENT_ROWS else 4)
 
                 val deferred =
                     settings.rows
@@ -241,6 +241,7 @@ class HomeViewModel
                 if (refresh || BuildConfig.GOOSEFLIX) {
                     // Replace rows as they complete
                     val remaining = deferred.withIndex().toMutableList()
+                    val done = mutableSetOf<Int>()
                     while (remaining.isNotEmpty()) {
                         val (rowIndex, rowData) =
                             select {
@@ -253,6 +254,7 @@ class HomeViewModel
                         Timber.v("Got row data index=%s", rowIndex)
                         timing("row $rowIndex ${timingLabel(rowData)}")
                         remaining.removeIf { it.index == rowIndex }
+                        done += rowIndex
                         _state.update { state ->
                             val newRows =
                                 state.homeRows.toMutableList().apply {
@@ -266,6 +268,18 @@ class HomeViewModel
                                         LoadingState.Success
                                     } else {
                                         state.loadingState
+                                    },
+                                // Fork: the corner spinner goes once the top rows are in, not the
+                                // last row far below the screen
+                                refreshState =
+                                    if (BuildConfig.GOOSEFLIX &&
+                                        state.refreshState == LoadingState.Loading &&
+                                        HomeFirstLoad.spinnerDone(done, newRows.size)
+                                    ) {
+                                        timing("spinner hidden")
+                                        LoadingState.Success
+                                    } else {
+                                        state.refreshState
                                     },
                             )
                         }

@@ -31,4 +31,13 @@ class HomeFirstLoadTest {
     fun aShownPageStaysShown() {
         assertTrue(HomeFirstLoad.showPage(LoadingState.Success, listOf(pending)))
     }
+
+    @Test
+    fun `the spinner goes once the top three rows are in, whatever is still loading below`() {
+        assertFalse(HomeFirstLoad.spinnerDone(setOf(0, 1), 20))
+        assertFalse(HomeFirstLoad.spinnerDone(setOf(0, 2, 5, 6), 20))
+        assertTrue(HomeFirstLoad.spinnerDone(setOf(2, 0, 1), 20))
+        assertTrue(HomeFirstLoad.spinnerDone(setOf(0, 1), 2))
+        assertTrue(HomeFirstLoad.spinnerDone(emptySet(), 0))
+    }
 }
