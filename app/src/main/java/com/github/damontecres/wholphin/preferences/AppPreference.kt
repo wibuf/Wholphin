@@ -377,6 +377,18 @@ sealed interface AppPreference<Pref, T> {
                 },
             )
 
+        /** Fork (GooseFlix): coloured intro/recap/outro/preview/commercial stretches on the progress bar */
+        val ShowSegmentsOnSeekBar =
+            AppSwitchPreference<AppPreferences>(
+                title = R.string.show_segments_on_seek_bar,
+                defaultValue = true,
+                getter = { !it.playbackPreferences.hideSegmentsOnSeekBar },
+                setter = { prefs, value ->
+                    prefs.updatePlaybackPreferences { hideSegmentsOnSeekBar = !value }
+                },
+                summary = R.string.show_segments_on_seek_bar_summary,
+            )
+
         /** Fork: whether passout protection covers live TV, movies and shows, or both */
         val PassOutProtectionScope =
             AppChoicePreference<AppPreferences, PassOutScope>(
@@ -1391,13 +1403,14 @@ val SkipSegmentPreferences =
         PreferenceGroup(
             title = R.string.skip,
             preferences =
-                listOf(
-                    AppPreference.SkipIntros,
-                    AppPreference.SkipOutros,
-                    AppPreference.SkipCommercials,
-                    AppPreference.SkipPreviews,
-                    AppPreference.SkipRecaps,
-                ),
+                buildList {
+                    add(AppPreference.SkipIntros)
+                    add(AppPreference.SkipOutros)
+                    add(AppPreference.SkipCommercials)
+                    add(AppPreference.SkipPreviews)
+                    add(AppPreference.SkipRecaps)
+                    if (BuildConfig.GOOSEFLIX) add(AppPreference.ShowSegmentsOnSeekBar)
+                },
         ),
     )
 

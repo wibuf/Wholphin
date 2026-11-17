@@ -133,6 +133,7 @@ class PlaybackViewModelTests {
             imageUrlService = mockImageUrlService,
             screensaverService = mockScreensaverService,
             musicService = mockMusicService,
+            nextEpisodePreload = mockk(relaxed = true),
             destination = destination,
         )
 

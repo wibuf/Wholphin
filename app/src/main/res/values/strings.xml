@@ -354,6 +354,10 @@
     <string name="nav_drawer_switch_on_focus">Switch nav drawer pages on focus</string>
     <string name="pass_out_protection">Passout Protection</string>
     <string name="pass_out_protection_scope">Passout Protection applies to</string>
+    <string name="preload_next_episode">Preload next episode</string>
+    <string name="preload_next_episode_summary">About a minute before the credits, get the next episode ready so it starts sooner</string>
+    <string name="show_segments_on_seek_bar">Show skip segments on the progress bar</string>
+    <string name="show_segments_on_seek_bar_summary">Colour the intro, recap, credits, preview and ads on the progress bar</string>
     <string-array name="pass_out_protection_scope_options">
         <item>Live TV and shows/movies</item>
         <item>Live TV only</item>

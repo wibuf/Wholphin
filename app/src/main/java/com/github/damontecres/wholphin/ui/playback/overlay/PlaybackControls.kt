@@ -168,6 +168,8 @@ fun PlaybackControls(
     // button, so skipping is one press after the one that opened the menu
     val skipFocusRequester = remember { FocusRequester() }
     var skipFocused by remember { mutableStateOf(false) }
+    // Fork (GooseFlix): may go to the end of the episode, see NextEpisodePreload.skipTargetMs
+    val skipTarget = com.github.damontecres.wholphin.ui.playback.LocalSegmentSkipTarget.current
     LaunchedEffect(controllerViewState.controlsVisible) {
         if (controllerViewState.controlsVisible) {
             if (BuildConfig.GOOSEFLIX && currentSegment != null) {
@@ -236,7 +238,7 @@ fun PlaybackControls(
                     TextButton(
                         stringRes = segment.type.skipStringRes,
                         onClick = {
-                            player.seekTo(segment.endTicks.ticks.inWholeMilliseconds)
+                            player.seekTo(skipTarget(segment))
                         },
                         modifier =
                             Modifier

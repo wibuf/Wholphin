@@ -43,6 +43,7 @@ import com.github.damontecres.wholphin.data.model.TrackIndex
 import com.github.damontecres.wholphin.mpv.MpvPlayer
 import com.github.damontecres.wholphin.preferences.AppPreference
 import com.github.damontecres.wholphin.preferences.PassOutScope
+import com.github.damontecres.wholphin.preferences.PlaybackPreferences
 import com.github.damontecres.wholphin.preferences.PlayerBackend
 import com.github.damontecres.wholphin.preferences.ShowNextUpWhen
 import com.github.damontecres.wholphin.preferences.SkipSegmentBehavior
@@ -116,6 +117,7 @@ import org.jellyfin.sdk.api.sockets.subscribe
 import org.jellyfin.sdk.model.DeviceInfo
 import org.jellyfin.sdk.model.api.BaseItemKind
 import org.jellyfin.sdk.model.api.ImageType
+import org.jellyfin.sdk.model.api.MediaSegmentDto
 import org.jellyfin.sdk.model.api.MediaSegmentType
 import org.jellyfin.sdk.model.api.MediaStreamType
 import org.jellyfin.sdk.model.api.MediaType
@@ -164,6 +166,7 @@ class PlaybackViewModel
         private val imageUrlService: ImageUrlService,
         private val screensaverService: ScreensaverService,
         private val musicService: MusicService,
+        private val nextEpisodePreload: NextEpisodePreload,
         @Assisted private val destination: Destination,
     ) : ViewModel(),
         Player.Listener,
@@ -737,6 +740,7 @@ class PlaybackViewModel
                     player.play()
                 }
                 listenForSegments(item.id)
+                if (BuildConfig.GOOSEFLIX) watchForPreload(item)
                 return@withContext true
             }
 
@@ -1322,7 +1326,7 @@ class PlaybackViewModel
             segmentJob?.cancel()
             autoSkippedSegments.clear()
             outroShownSegments.clear()
-            _state.update { it.copy(currentSegment = null) }
+            _state.update { it.copy(currentSegment = null, mediaSegments = emptyList()) }
         }
 
         /**
@@ -1334,6 +1338,7 @@ class PlaybackViewModel
                 viewModelScope.launchIO {
                     val prefs = preferences.appPreferences.playbackPreferences
                     val segments by api.mediaSegmentsApi.getItemSegments(itemId)
+                    if (BuildConfig.GOOSEFLIX) _state.update { it.copy(mediaSegments = segments.items) }
                     if (segments.items.isNotEmpty()) {
                         while (isActive) {
                             delay(500L)
@@ -1390,7 +1395,7 @@ class PlaybackViewModel
                                                             timeline.mark(
                                                                 "auto-skipping ${currentSegment.type} to ${currentSegment.endTicks.ticks.inWholeMilliseconds}ms",
                                                             )
-                                                            player.seekTo(currentSegment.endTicks.ticks.inWholeMilliseconds + 1)
+                                                            player.seekTo(skipTargetMs(currentSegment))
                                                         }
                                                     }
                                                     MediaSegmentState(currentSegment, true)
@@ -1432,10 +1437,140 @@ class PlaybackViewModel
                         _state.update { it.copy(currentSegment = null) }
                         onMain {
                             timeline.mark("skipping ${segment.type} to ${segment.endTicks.ticks.inWholeMilliseconds}ms")
-                            player.seekTo(segment.endTicks.ticks.inWholeMilliseconds + 1)
+                            player.seekTo(skipTargetMs(segment))
                         }
                     }
                 }
+            }
+        }
+
+        /**
+         * Fork (GooseFlix): where skipping [segment] lands. Upstream: just past its end. GooseFlix:
+         * also past the segments right after it that the user auto-skips, and the end of the episode
+         * when only a few seconds would be left, so the next episode starts at once.
+         * Must be called on the main thread (reads the player).
+         */
+        fun skipTargetMs(segment: MediaSegmentDto): Long {
+            val end = segment.endTicks.ticks.inWholeMilliseconds + 1
+            if (!BuildConfig.GOOSEFLIX) return end
+            val prefs = preferences.appPreferences.playbackPreferences
+            val autoSkipped =
+                state.value.mediaSegments
+                    .filter { it.id != segment.id && segmentBehavior(prefs, it.type) == SkipSegmentBehavior.AUTO_SKIP }
+                    .map { it.startTicks.ticks.inWholeMilliseconds to it.endTicks.ticks.inWholeMilliseconds }
+            return NextEpisodePreload.skipTargetMs(end, player.duration, autoSkipped)
+        }
+
+        private fun segmentBehavior(
+            prefs: PlaybackPreferences,
+            type: MediaSegmentType,
+        ): SkipSegmentBehavior =
+            when (type) {
+                MediaSegmentType.COMMERCIAL -> prefs.skipCommercials
+                MediaSegmentType.PREVIEW -> prefs.skipPreviews
+                MediaSegmentType.RECAP -> prefs.skipRecaps
+                MediaSegmentType.OUTRO -> prefs.skipOutros
+                MediaSegmentType.INTRO -> prefs.skipIntros
+                MediaSegmentType.UNKNOWN -> SkipSegmentBehavior.IGNORE
+            }
+
+        // Fork (GooseFlix): "Preload next episode" (experimental), see NextEpisodePreload
+        private var preloadJob: Job? = null
+
+        /**
+         * Watches the current item's position and, at [NextEpisodePreload.triggerAtMs], warms up the
+         * next episode once: Jellyfin's playback decision for it, and the start of its file. Only
+         * when the next item would play (auto-play or Next Up), never for live TV.
+         */
+        private fun watchForPreload(item: BaseItem) {
+            preloadJob?.cancel()
+            if (!preferences.appPreferences.experimentalPreferences.enabled { preloadNextEpisode }) return
+            if (item.type.isLiveTvStream) return
+            val playbackPrefs = preferences.appPreferences.playbackPreferences
+            if (!playbackPrefs.autoPlayNext && playbackPrefs.showNextUpWhen == ShowNextUpWhen.NEXT_UP_NEVER) return
+            preloadJob =
+                viewModelScope.launchIO {
+                    while (isActive) {
+                        delay(2.seconds)
+                        if (this@PlaybackViewModel.itemId != item.id) return@launchIO
+                        val (position, duration) = onMain { player.currentPosition to player.duration }
+                        val outroStart =
+                            state.value.mediaSegments
+                                .filter { it.type == MediaSegmentType.OUTRO }
+                                .minOfOrNull { it.startTicks.ticks.inWholeMilliseconds }
+                        val trigger = NextEpisodePreload.triggerAtMs(duration, outroStart) ?: continue
+                        if (position < trigger) continue
+                        val next = (state.value.nextItem() as? PlaylistItem.Media)?.item ?: return@launchIO
+                        warmUp(next)
+                        return@launchIO
+                    }
+                }
+        }
+
+        private suspend fun warmUp(next: BaseItem) {
+            val started = android.os.SystemClock.elapsedRealtime()
+            timeline.mark("preloading next episode '${next.name}' (${next.id})")
+            try {
+                val itemPlayback =
+                    serverRepository.currentUser?.let { user ->
+                        itemPlaybackDao.getItem(user, next.data.id)?.takeIf { it.sourceId != null }
+                    }
+                val chosen = streamChoiceService.chooseSource(next.data, itemPlayback)
+                val response by
+                    api.mediaInfoApi.getPostedPlaybackInfo(
+                        next.id,
+                        PlaybackInfoDto(
+                            startTimeTicks = null,
+                            deviceProfile =
+                                if (currentPlayer.value?.backend == PlayerBackend.MPV) {
+                                    mpvDeviceProfile(supportsAVCHigh10 = deviceProfileService.supportsAVCHigh10)
+                                } else {
+                                    deviceProfileService.getOrCreateDeviceProfile(
+                                        preferences.appPreferences,
+                                        serverRepository.currentServer?.serverVersion,
+                                    )
+                                },
+                            mediaSourceId = chosen?.id,
+                            maxStreamingBitrate = state.value.maxBitrate.toInt(),
+                            enableDirectPlay = !forceTranscoding,
+                            enableDirectStream = !forceTranscoding,
+                            allowVideoStreamCopy = !forceTranscoding,
+                            allowAudioStreamCopy = !forceTranscoding,
+                            enableTranscoding = true,
+                            // Don't open anything: this is only a look ahead
+                            autoOpenLiveStream = false,
+                        ),
+                    )
+                val source = response.mediaSources.firstOrNull()
+                // Only a file that plays as it is is read ahead; starting a transcode early would
+                // load the server for an episode that may never be played
+                val read =
+                    if (source?.supportsDirectPlay == true) {
+                        val remote = source.isRemote && !source.path.isNullOrBlank()
+                        val url =
+                            if (remote) {
+                                source.path!!
+                            } else {
+                                api.videosApi.getVideoStreamUrl(
+                                    itemId = next.id,
+                                    mediaSourceId = source.id,
+                                    static = true,
+                                    tag = source.eTag,
+                                )
+                            }
+                        nextEpisodePreload.readAhead(url, jellyfin = !remote)
+                    } else {
+                        -1L
+                    }
+                timeline.mark(
+                    "next episode warmed in ${android.os.SystemClock.elapsedRealtime() - started}ms " +
+                        "(directPlay=${source?.supportsDirectPlay}, read ${if (read >= 0) read / 1024 else -1}KB)",
+                )
+            } catch (ex: CancellationException) {
+                throw ex
+            } catch (ex: Exception) {
+                Timber.w(ex, "Preload of the next episode failed")
+                timeline.mark("next episode preload failed: ${ex.javaClass.simpleName}")
             }
         }
 

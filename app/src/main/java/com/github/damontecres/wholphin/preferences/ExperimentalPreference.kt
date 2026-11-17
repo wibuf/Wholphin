@@ -83,6 +83,18 @@ object ExperimentalPreference {
             },
         )
 
+    /** Fork (GooseFlix): see ui/playback/NextEpisodePreload.kt */
+    val PreloadNextEpisode =
+        AppSwitchPreference<AppPreferences>(
+            title = R.string.preload_next_episode,
+            defaultValue = false,
+            getter = { it.experimentalPreferences.preloadNextEpisode },
+            setter = { prefs, value ->
+                prefs.updateExperimentalPreferences { preloadNextEpisode = value }
+            },
+            summary = R.string.preload_next_episode_summary,
+        )
+
     val DisableAudioOffload =
         AppSwitchPreference<AppPreferences>(
             title = R.string.disable_audio_offload,
@@ -101,13 +113,14 @@ val experimentalPreferences =
             PreferenceGroup(
                 title = R.string.experimental_settings,
                 preferences =
-                    listOf(
-                        ExperimentalPreference.VideoTunneling,
-                        ExperimentalPreference.PreferDolbyVisionOverHdr10Plus,
-                        ExperimentalPreference.ConvertDolbyVisionProfile7,
-                        ExperimentalPreference.PreferAc3ForSurround,
-                        ExperimentalPreference.DisableAudioOffload,
-                    ),
+                    buildList {
+                        add(ExperimentalPreference.VideoTunneling)
+                        add(ExperimentalPreference.PreferDolbyVisionOverHdr10Plus)
+                        add(ExperimentalPreference.ConvertDolbyVisionProfile7)
+                        add(ExperimentalPreference.PreferAc3ForSurround)
+                        add(ExperimentalPreference.DisableAudioOffload)
+                        if (com.github.damontecres.wholphin.BuildConfig.GOOSEFLIX) add(ExperimentalPreference.PreloadNextEpisode)
+                    },
             ),
         )
     }

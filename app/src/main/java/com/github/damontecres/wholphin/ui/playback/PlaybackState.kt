@@ -25,6 +25,8 @@ data class PlaybackState(
     val playlistIndex: Int = 0,
     val playlist: Playlist = Playlist(emptyList()),
     val maxBitrate: Long = -1L,
+    // Fork (GooseFlix): the current item's segments, for the progress bar and skip targets
+    val mediaSegments: List<org.jellyfin.sdk.model.api.MediaSegmentDto> = emptyList(),
 ) {
     val hasNext: Boolean get() = (playlistIndex + 1) < playlist.items.size
     val hasPrevious: Boolean get() = playlistIndex > 0

@@ -118,6 +118,8 @@ message PlaybackPreferences {
   // What passout protection covers: live TV ("Still watching?" then stop), the next
   // episode autoplaying, or both (the default, so 0)
   PassOutScope pass_out_scope = 502;
+  // Hide the intro/recap/outro/preview/commercial stretches on the progress bar (shown by default)
+  bool hide_segments_on_seek_bar = 503;
 }
 
 enum PassOutScope {
@@ -294,6 +296,10 @@ message ExperimentalPreferences {
   bool disable_audio_offload = 4;
   bool prefer_dolby_vision_over_hdr10_plus = 5;
   bool convert_dolby_vision_profile_7 = 6;
+
+  // Fork-only, numbered far above upstream's (see PlaybackPreferences)
+  // Warm up the next episode about a minute before the outro or the end
+  bool preload_next_episode = 500;
 }
 
 message AppPreferences {

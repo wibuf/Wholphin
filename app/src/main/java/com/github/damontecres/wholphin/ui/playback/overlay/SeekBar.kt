@@ -202,6 +202,8 @@ private fun SeekBarDisplay(
 ) {
     val color = MaterialTheme.colorScheme.border
     val onSurface = MaterialTheme.colorScheme.onSurface
+    // Fork (GooseFlix): intro/recap/outro/preview/commercial stretches, drawn over the bar
+    val segments = com.github.damontecres.wholphin.ui.playback.LocalSeekBarSegments.current
 
     val isFocused by interactionSource.collectIsFocusedAsState()
     var leftHandledByRepeat by remember { mutableStateOf(false) }
@@ -313,6 +315,21 @@ private fun SeekBarDisplay(
                     strokeWidth = size.height,
                     cap = StrokeCap.Round,
                 )
+                if (durationMs > 0) {
+                    segments.forEach { segment ->
+                        val start = (segment.startMs.toFloat() / durationMs).coerceIn(0f, 1f)
+                        val end = (segment.endMs.toFloat() / durationMs).coerceIn(0f, 1f)
+                        if (end > start) {
+                            drawLine(
+                                color = segment.color.copy(alpha = 0.85f),
+                                start = Offset(x = size.width * start, y = yOffset),
+                                end = Offset(x = size.width * end, y = yOffset),
+                                strokeWidth = size.height,
+                                cap = StrokeCap.Butt,
+                            )
+                        }
+                    }
+                }
                 drawCircle(
                     color = Color.White,
                     radius = size.height + 2,
