@@ -230,21 +230,13 @@ object PersonalRows {
     fun isPersonal(row: HomeRowConfig): Boolean = row is HomeRowConfig.CustomEndpoint && row.endpoint.startsWith(PREFIX)
 
     /**
-     * The title to show: the plugin's, if it sent one, else the row's own. A mood row adds how many
-     * titles the user has in it ("Heists & cons · 12 in your library").
+     * The title to show: the plugin's, if it sent one, else the row's own. Mood rows used to add how
+     * many titles the user has in it ("· 12 in your library"); the owner dropped that (GooseFlix #1659).
      */
     fun title(
         row: HomeRowConfig.CustomEndpoint,
         headerTitle: String?,
-        total: Int?,
-    ): String {
-        val name = headerTitle?.let(::decodeHeader)?.trim()?.takeIf { it.isNotEmpty() } ?: row.title
-        return if (row.endpoint == PREFIX + MOOD && total != null && total > 0) {
-            "$name · $total in your library"
-        } else {
-            name
-        }
-    }
+    ): String = headerTitle?.let(::decodeHeader)?.trim()?.takeIf { it.isNotEmpty() } ?: row.title
 
     /**
      * The plugin percent-encodes header values (UTF-8), since titles can be non-ASCII. Uses the

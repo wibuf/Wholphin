@@ -22,15 +22,14 @@ class PersonalRowsTest {
     }
 
     @Test
-    fun `the plugin's title wins, and a mood row says how many are in the library`() {
-        assertEquals("Picked for you", PersonalRows.title(picked, null, 40))
-        assertEquals("Because you watched Inception", PersonalRows.title(picked, " Because you watched Inception ", null))
-        assertEquals("Heists & cons · 12 in your library", PersonalRows.title(mood, "Heists & cons", 12))
-        assertEquals("Heists & cons", PersonalRows.title(mood, "Heists & cons", 0))
+    fun `the plugin's title wins, and mood rows show just the mood's name`() {
+        assertEquals("Picked for you", PersonalRows.title(picked, null))
+        assertEquals("Because you watched Inception", PersonalRows.title(picked, " Because you watched Inception "))
+        assertEquals("Heists & cons", PersonalRows.title(mood, "Heists & cons"))
         // Percent-encoded by the plugin
-        assertEquals("Because you watched Amélie", PersonalRows.title(picked, "Because%20you%20watched%20Am%C3%A9lie", null))
-        assertEquals("Heists & cons · 3 in your library", PersonalRows.title(mood, "Heists%20%26%20cons", 3))
-        assertEquals("C++ stories", PersonalRows.title(picked, "C++ stories", null))
+        assertEquals("Because you watched Amélie", PersonalRows.title(picked, "Because%20you%20watched%20Am%C3%A9lie"))
+        assertEquals("Heists & cons", PersonalRows.title(mood, "Heists%20%26%20cons"))
+        assertEquals("C++ stories", PersonalRows.title(picked, "C++ stories"))
     }
 
     @Test

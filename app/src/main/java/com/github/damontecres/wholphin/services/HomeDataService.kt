@@ -778,7 +778,7 @@ class HomeDataService
                 }
                 val disliked = PersonalRows.disliked.value
                 Success(
-                    StringStringProvider(PersonalRows.title(row, response.headerTitle, response.total)),
+                    StringStringProvider(PersonalRows.title(row, response.headerTitle)),
                     PersonalRows
                         .distinctTitles(response.items, response.sourceTmdb)
                         .filterNot { it.userData?.likes == false || it.id in disliked }
