@@ -29,6 +29,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.viewModelScope
 import androidx.tv.material3.MaterialTheme
+import com.github.damontecres.wholphin.BuildConfig
 import com.github.damontecres.wholphin.R
 import com.github.damontecres.wholphin.data.LibraryDisplayInfoDao
 import com.github.damontecres.wholphin.data.ServerRepository
@@ -48,6 +49,8 @@ import com.github.damontecres.wholphin.services.FilterOptionCache
 import com.github.damontecres.wholphin.services.MediaManagementService
 import com.github.damontecres.wholphin.services.MusicService
 import com.github.damontecres.wholphin.services.NavigationManager
+import com.github.damontecres.wholphin.services.PluginRatings
+import com.github.damontecres.wholphin.services.RatingSortSource
 import com.github.damontecres.wholphin.services.ServerReportService
 import com.github.damontecres.wholphin.services.StreamChoiceService
 import com.github.damontecres.wholphin.services.ThemeSongPlayer
@@ -77,6 +80,7 @@ import com.github.damontecres.wholphin.util.GetArtistsHandler
 import com.github.damontecres.wholphin.util.GetItemsRequestHandler
 import com.github.damontecres.wholphin.util.GetPersonsHandler
 import com.github.damontecres.wholphin.util.LoadingState
+import com.github.damontecres.wholphin.util.RatingSortRequestHandler
 import com.github.damontecres.wholphin.util.WholphinDispatchers
 import com.github.damontecres.wholphin.util.successValue
 import dagger.assisted.Assisted
@@ -153,6 +157,11 @@ class CollectionFolderViewModel
         private val _state = MutableStateFlow(CollectionFolderState(viewOptions = defaultViewOptions))
         val state: StateFlow<CollectionFolderState> = _state
 
+        // Fork (GooseFlix #1671): the "Rating" sort, by the GooseFlix plugin's ratings. Null without them.
+        private var ratingSortAvailable = false
+        private val _ratingSort = MutableStateFlow<RatingSortState?>(null)
+        val ratingSort: StateFlow<RatingSortState?> = _ratingSort
+
         private val artistSource: ArtistSource
             get() = state.value.viewOptions.artistSource
 
@@ -209,6 +218,11 @@ class CollectionFolderViewModel
                         }
 
                     _state.update { it.copy(item = DataLoadingState.Success(item)) }
+                    if (BuildConfig.GOOSEFLIX && item != null && PluginRatings.available(api)) {
+                        ratingSortAvailable = true
+                        _ratingSort.value =
+                            RatingSortState(PluginRatings.savedSource(context, serverRepository.currentUser?.rowId, itemId, item.name))
+                    }
                     loadResults(true, sortAndDirection, recursive, filterToUse, useSeriesForPrimary)
                         .join()
 //                    onResumePage()
@@ -361,6 +375,14 @@ class CollectionFolderViewModel
             recursive: Boolean,
             filter: GetItemsFilter,
         ) {
+            // Fork (GooseFlix #1671): switching to the Rating sort starts with the best rated
+            if (BuildConfig.GOOSEFLIX &&
+                ratingSortAvailable &&
+                sortAndDirection.sort == ItemSortBy.COMMUNITY_RATING &&
+                state.value.sortAndDirection.sort != ItemSortBy.COMMUNITY_RATING
+            ) {
+                return onSortChange(sortAndDirection.copy(direction = SortOrder.DESCENDING), recursive, filter)
+            }
             Timber.v(
                 "onSortChange: sort=%s, recursive=%s, filter=%s",
                 sortAndDirection,
@@ -390,6 +412,11 @@ class CollectionFolderViewModel
                 val newPager =
                     createPager(sortAndDirection, recursive, filter, useSeriesForPrimary).init()
                 if (newPager.isNotEmpty()) newPager.getBlocking(0)
+                if (BuildConfig.GOOSEFLIX) {
+                    // Fork (GooseFlix #1671): the cards' scores, once the rating order is loaded
+                    val scores = (newPager.requestHandler as? RatingSortRequestHandler)?.scores?.value.orEmpty()
+                    _ratingSort.update { it?.copy(scores = scores) }
+                }
                 _state.update {
                     it.copy(
                         items = DataLoadingState.Success(newPager),
@@ -430,7 +457,7 @@ class CollectionFolderViewModel
                         ApiRequestPager(
                             api,
                             request,
-                            GetItemsRequestHandler,
+                            ratingSortHandler(sortAndDirection) ?: GetItemsRequestHandler,
                             viewModelScope,
                             useSeriesForPrimary = useSeriesForPrimary,
                         )
@@ -479,6 +506,28 @@ class CollectionFolderViewModel
                     }
                 }
             }
+
+        /** Fork (GooseFlix #1671): the plugin-ratings order, when sorting by Rating with them available */
+        private fun ratingSortHandler(sortAndDirection: SortAndDirection): RatingSortRequestHandler? {
+            val ratingSort = _ratingSort.value
+            return if (BuildConfig.GOOSEFLIX &&
+                ratingSortAvailable &&
+                ratingSort != null &&
+                sortAndDirection.sort == ItemSortBy.COMMUNITY_RATING
+            ) {
+                RatingSortRequestHandler(ratingSort.source.key, sortAndDirection.direction == SortOrder.DESCENDING)
+            } else {
+                null
+            }
+        }
+
+        /** Fork (GooseFlix #1671): a different rating source, remembered for this library */
+        fun onRatingSourceChange(source: RatingSortSource) {
+            PluginRatings.saveSource(context, serverRepository.currentUser?.rowId, itemId, source)
+            _ratingSort.update { it?.copy(source = source, scores = emptyMap()) }
+            val current = state.value
+            loadResults(true, current.sortAndDirection, recursive, current.filter, useSeriesForPrimary)
+        }
 
         /**
          * Shared with [positionOfLetter] so that the alphabet jump counts the same artists that are
@@ -843,28 +892,41 @@ fun CollectionFolderView(
             viewModel.release()
         }
     }
-    CollectionFolderViewContent(
-        preferences = preferences,
-        state = state,
-        savedPosition = viewModel.position,
-        itemId = itemId,
-        initialFilter = initialFilter,
-        recursive = recursive,
-        actions = actions,
-        sortOptions = sortOptions,
-        playEnabled = playEnabled,
-        defaultViewOptions = defaultViewOptions,
-        viewActions = viewModel,
-        modifier = modifier,
-        provider = viewModel,
-        showTitle = showTitle,
-        positionCallback = { columns, index ->
-            viewModel.position = index
-            positionCallback?.invoke(columns, index)
-        },
-        filterOptions = filterOptions,
-        focusRequesterOnEmpty = focusRequesterOnEmpty,
-    )
+    // Fork (GooseFlix #1671): the "Rating" sort for the header and the cards' scores
+    val ratingSort by viewModel.ratingSort.collectAsState()
+    val ratingSortUi =
+        ratingSort?.let {
+            RatingSortUi(
+                source = it.source,
+                active = state.sortAndDirection.sort == ItemSortBy.COMMUNITY_RATING,
+                scores = it.scores,
+                onSourceChange = viewModel::onRatingSourceChange,
+            )
+        }
+    androidx.compose.runtime.CompositionLocalProvider(LocalRatingSort provides ratingSortUi) {
+        CollectionFolderViewContent(
+            preferences = preferences,
+            state = state,
+            savedPosition = viewModel.position,
+            itemId = itemId,
+            initialFilter = initialFilter,
+            recursive = recursive,
+            actions = actions,
+            sortOptions = sortOptions,
+            playEnabled = playEnabled,
+            defaultViewOptions = defaultViewOptions,
+            viewActions = viewModel,
+            modifier = modifier,
+            provider = viewModel,
+            showTitle = showTitle,
+            positionCallback = { columns, index ->
+                viewModel.position = index
+                positionCallback?.invoke(columns, index)
+            },
+            filterOptions = filterOptions,
+            focusRequesterOnEmpty = focusRequesterOnEmpty,
+        )
+    }
 }
 
 interface CollectionFolderViewActions {

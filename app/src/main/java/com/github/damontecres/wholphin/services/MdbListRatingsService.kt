@@ -1,6 +1,7 @@
 package com.github.damontecres.wholphin.services
 
 import android.os.SystemClock
+import com.github.damontecres.wholphin.BuildConfig
 import com.github.damontecres.wholphin.data.model.MdbListRatingsResponse
 import com.github.damontecres.wholphin.data.model.MdbListSource
 import kotlinx.serialization.json.Json
@@ -61,12 +62,22 @@ class MdbListRatingsService
             return result
         }
 
+        /**
+         * Fork (GooseFlix #1671): the GooseFlix plugin's own ratings first (same JSON shape), then the
+         * MDBList Ratings plugin's, so the row works with either or both installed.
+         */
         private suspend fun fetch(itemId: UUID): MdbListRatingsResponse? =
+            (if (BuildConfig.GOOSEFLIX) fetch(itemId, PluginRatings.ITEM_PATH) else null) ?: fetch(itemId, PATH)
+
+        private suspend fun fetch(
+            itemId: UUID,
+            path: String,
+        ): MdbListRatingsResponse? =
             try {
                 val response =
                     api.request(
                         method = HttpMethod.GET,
-                        pathTemplate = PATH,
+                        pathTemplate = path,
                         queryParameters = mapOf("itemId" to itemId.toString()),
                     )
                 if (response.status != 200) {

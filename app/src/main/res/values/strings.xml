@@ -25,6 +25,7 @@
     <string name="confirm">Confirm</string>
     <string name="continue_watching">Continue watching</string>
     <string name="critic_rating">Critic Rating</string>
+    <string name="sort_by_rating">Rating</string>
     <string name="decimal_seconds">%.2f seconds</string>
     <string name="duration_hours_minutes_seconds">%1$dh %2$dm %3$ds</string>
     <string name="duration_hours_minutes">%1$dh %2$dm</string>

@@ -332,6 +332,10 @@ fun CollectionFolderHeader(
                             onSortChange = onSortChange,
                             modifier = Modifier.focusRequester(focusRequester),
                         )
+                        // Fork (GooseFlix #1671): which rating, while sorted by rating
+                        LocalRatingSort.current?.takeIf { sortAndDirection.sort == ItemSortBy.COMMUNITY_RATING }?.let {
+                            RatingSourceButton(it)
+                        }
                     }
                     if (filterOptions.isNotEmpty()) {
                         FilterByButton(

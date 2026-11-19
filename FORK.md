@@ -100,6 +100,20 @@ Newest first within each area. The numbers are GooseFlix issues unless they say 
 - The server's own critic and community scores are hidden by default, but shown whenever MDBList has nothing for an item (not fetched yet, or an empty result). The home page header looks MDBList up for the focused item, like the details page. The app's MDBList lookups expire (6 h when found, 10 min when not), so an item looked up before the plugin's daily refresh doesn't stay blank until the app restarts.
 - Details pages show every genre on one line (upstream stops at four and adds "+N"), and drop "Ends at" from the details line so the ratings fit; the player still shows it (#1451).
 
+- **Ratings from the GooseFlix plugin** (GooseFlix #1671): the details ratings row asks the GooseFlix server plugin first (`/wholphin/ratings/item`, the same JSON as the MDBList Ratings plugin), then the MDBList Ratings plugin. The provider logos still come from the MDBList Ratings plugin's assets.
+- **Sort a library by any rating** (GooseFlix #1671, "Option B"): when the plugin lists the `ratings` feature (`/wholphin/rows/capabilities`, checked every ten minutes), the library sort menu shows one **Rating** entry in place of Community and Critic rating. Next to it, a second menu picks the source: IMDb, RT critics, RT audience, MyAnimeList, Metacritic, Letterboxd, TMDB, Trakt or the MDBList score.
+  - **Defaults:** MyAnimeList for a library whose name contains "anime", IMDb otherwise. The choice is remembered per user and library, in the app's own preferences (`gooseflix_rating_sort`); Jellyfin's saved sort, a database table, stays Community rating.
+  - **Direction:** switching to Rating starts with the best rated.
+  - **How it sorts:** Jellyfin can only sort by its own two rating fields, so the first page:
+    1. asks Jellyfin for every matching title's id (the library's filters and the user's access, by name);
+    2. asks the plugin for the source's score of every title in the library (`/wholphin/ratings/values`);
+    3. orders them by score, with unrated titles last by name.
+
+    Pages are then slices of that order, fetched by id (`util/RatingSortRequestHandler.kt`).
+  - **Cards:** each card shows its score at the bottom left of the poster while sorted by rating ("★ 9.2", "94%" for Rotten Tomatoes).
+  - **Without the plugin feature,** the library keeps Jellyfin's Community and Critic rating sorts.
+  - Code: `services/PluginRatings.kt`, `ui/components/RatingSort.kt`, `CollectionFolderView.kt`, `SortByButton.kt`, `GridCard.kt`; test `PluginRatingsTest`.
+
 ### Requests (Seerr)
 - Every signed-in user is connected to Seerr automatically through Scuffed's proxy, with their Jellyfin token in place of an API key; accounts the proxy blocks (eg `playreview`) get no Seerr, so no Discover (#1516; `services/GooseFlixSeerr.kt`, Scuffed `collector/gooseflix_seerr.py`). `SEERR_PROXY_URL` is `https://add.beefmc.com/api/gooseflix/seerr`; `-PforkSeerrProxyUrl=` (empty) turns it off. The proxy confirms Seerr acts as each user before forwarding anything for them, and refuses if not.
 

@@ -38,6 +38,9 @@ fun SortByButton(
     val currentSort = current.sort
     val currentDirection = current.direction
     var sortByDropDown by remember { mutableStateOf(false) }
+    // Fork (GooseFlix #1671): with the plugin's ratings, one "Rating" entry (the source is chosen
+    // next to it) in place of Community and Critic rating
+    val ratingSort = LocalRatingSort.current
 
     Box(modifier = modifier) {
         TextButton(
@@ -56,6 +59,7 @@ fun SortByButton(
             onDismissRequest = { sortByDropDown = false },
         ) {
             sortOptions
+                .filter { ratingSort == null || it != ItemSortBy.CRITIC_RATING }
 //                .sortedBy { it.name }
                 .forEach { sortOption ->
                     TvDropdownMenuItem(
@@ -76,7 +80,7 @@ fun SortByButton(
                         },
                         text = {
                             Text(
-                                text = stringResource(getStringRes(sortOption)),
+                                text = sortLabel(sortOption),
                             )
                         },
                         onClick = {
@@ -115,7 +119,16 @@ fun SortAndDirection.toAnnotatedString() =
             )
         }
         append(" ")
-        append(stringResource(getStringRes(sort)))
+        append(sortLabel(sort))
+    }
+
+/** Fork (GooseFlix #1671): "Rating" for Community rating when the plugin's ratings are on */
+@Composable
+private fun sortLabel(sort: ItemSortBy): String =
+    if (LocalRatingSort.current != null && sort == ItemSortBy.COMMUNITY_RATING) {
+        stringResource(R.string.sort_by_rating)
+    } else {
+        stringResource(getStringRes(sort))
     }
 
 // TODO code duplicated from SortByButton
