@@ -9,6 +9,7 @@ import com.github.damontecres.wholphin.ui.detail.DebugViewModel.Companion.getLog
 import com.github.damontecres.wholphin.ui.launchIO
 import com.github.damontecres.wholphin.ui.showToast
 import com.github.damontecres.wholphin.util.ExceptionHandler
+import com.github.damontecres.wholphin.util.LogUpload
 import com.google.protobuf.MessageLiteOrBuilder
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
@@ -82,8 +83,29 @@ class ServerReportService
                     """.trimIndent()
             body.chunked(2048).forEach { Timber.w(it) }
             Timber.w("End send media info")
-            val response by api.clientLogApi.logFile(body)
-            showToast(context, "Sent! Filename=${response.fileName}")
+            // Fork: sized for the server's upload limit, and a failure is said, not silent
+            if (BuildConfig.GOOSEFLIX) {
+                upload("media info", body)
+            } else {
+                val response by api.clientLogApi.logFile(body)
+                showToast(context, "Sent! Filename=${response.fileName}")
+            }
+        }
+
+        /** Fork (GooseFlix): sends [body] to the server's client logs, cut to fit, saying how it went */
+        private suspend fun upload(
+            what: String,
+            body: String,
+        ) {
+            try {
+                val response by api.clientLogApi.logFile(LogUpload.fit(body))
+                showToast(context, "Sent! Filename=${response.fileName}")
+            } catch (ex: kotlinx.coroutines.CancellationException) {
+                throw ex
+            } catch (ex: Exception) {
+                Timber.e(ex, "Could not send %s", what)
+                showToast(context, "Couldn't send $what: ${ex.message ?: ex.javaClass.simpleName}")
+            }
         }
 
         fun buildLogHeader(title: String): String {
@@ -104,6 +126,10 @@ class ServerReportService
             val logcat = getLogCatLines().joinToString("\n") { it.text }
             val header = buildLogHeader("Send App Logs")
             Timber.w(header)
+            if (BuildConfig.GOOSEFLIX) {
+                upload("app logs", header + "\n\n" + logcat)
+                return
+            }
             val response by api.clientLogApi.logFile(header + "\n\n" + logcat)
             showToast(context, "Sent! Filename=${response.fileName}")
         }

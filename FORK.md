@@ -64,6 +64,7 @@ Newest first within each area. The numbers are GooseFlix issues unless they say 
 - Self-updater from Scuffed's feed: silent install on Android 12+, one press below that (`services/update/`).
 - The image loader sends the Jellyfin token only to the Jellyfin server. Upstream's sent it with every image request, so TMDB images (pill art, Discover) received it too.
 - Google Play build: `bot.grit.gooseflix`, game cores bundled, minSdk 24, signing key exported to Play App Signing (`.github/workflows/play-signing-key.yml`, one-off).
+- **Logs and crash reports reach the server:** "Send app logs", "Send media info" and crash reports are cut to fit Jellyfin's client log upload limit (1,000,000 bytes), keeping the start and the most recent lines, and a crash's stack trace has runs of the same line counted instead of listed (a stack overflow repeats one frame thousands of times). A failed send says so on screen instead of failing silently (`util/LogUpload.kt`, `ServerReportService`, `CrashReportSenderFactory`).
 
 ### Home page
 - Quick pills: a row of shortcut buttons at the top (Guide, favourite channels) per user, set in Scuffed's admin page (`services/QuickPillsService.kt`, `ui/main/QuickPills.kt`).

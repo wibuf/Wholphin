@@ -1,6 +1,7 @@
 package com.github.damontecres.wholphin.util
 
 import android.content.Context
+import com.github.damontecres.wholphin.BuildConfig
 import com.github.damontecres.wholphin.data.MostRecentServer
 import com.github.damontecres.wholphin.services.hilt.AppModule
 import com.github.damontecres.wholphin.services.hilt.DeviceModule
@@ -46,9 +47,11 @@ class CrashReportSender : ReportSender {
             if (api != null) {
                 val obj = JSONObject()
                 for ((key, value) in errorContent.toMap()) {
-                    obj.put(key, value)
+                    // Fork (GooseFlix): a stack overflow repeats one frame thousands of times
+                    obj.put(key, if (BuildConfig.GOOSEFLIX && value is String && key == "STACK_TRACE") LogUpload.collapseRepeats(value) else value)
                 }
-                val jsonStr = obj.toString(2)
+                // Fork (GooseFlix): over the server's 1 MB limit the report was rejected and lost
+                val jsonStr = obj.toString(2).let { if (BuildConfig.GOOSEFLIX) LogUpload.fit(it) else it }
                 runBlocking {
                     val filename =
                         api.clientLogApi
