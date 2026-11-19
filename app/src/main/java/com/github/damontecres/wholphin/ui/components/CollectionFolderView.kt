@@ -375,14 +375,18 @@ class CollectionFolderViewModel
             recursive: Boolean,
             filter: GetItemsFilter,
         ) {
-            // Fork (GooseFlix #1671): switching to the Rating sort starts with the best rated
-            if (BuildConfig.GOOSEFLIX &&
-                ratingSortAvailable &&
-                sortAndDirection.sort == ItemSortBy.COMMUNITY_RATING &&
-                state.value.sortAndDirection.sort != ItemSortBy.COMMUNITY_RATING
-            ) {
-                return onSortChange(sortAndDirection.copy(direction = SortOrder.DESCENDING), recursive, filter)
-            }
+            // Fork (GooseFlix #1671): switching to the Rating sort starts with the best rated. (Not by
+            // calling this again: the state still holds the old sort then, so it never stopped.)
+            val sortAndDirection =
+                if (BuildConfig.GOOSEFLIX &&
+                    ratingSortAvailable &&
+                    sortAndDirection.sort == ItemSortBy.COMMUNITY_RATING &&
+                    state.value.sortAndDirection.sort != ItemSortBy.COMMUNITY_RATING
+                ) {
+                    sortAndDirection.copy(direction = SortOrder.DESCENDING)
+                } else {
+                    sortAndDirection
+                }
             Timber.v(
                 "onSortChange: sort=%s, recursive=%s, filter=%s",
                 sortAndDirection,
