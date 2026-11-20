@@ -1,6 +1,7 @@
 package com.github.damontecres.wholphin.ui.playback
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -78,6 +79,13 @@ fun SkipSettingsDialog(
     gravity: Int,
 ) {
     var picking by remember { mutableStateOf<MediaSegmentType?>(null) }
+    // BottomDialog closes itself before reporting a selection. Picking a type must open its choices,
+    // not close the menu, so a close only counts if no selection followed it in the same click
+    // (back, or pressing outside)
+    var closing by remember { mutableStateOf(false) }
+    LaunchedEffect(closing) {
+        if (closing) onDismissRequest()
+    }
     val type = picking
     if (type == null) {
         val choices =
@@ -91,8 +99,11 @@ fun SkipSettingsDialog(
             }
         BottomDialog(
             choices = choices,
-            onDismissRequest = onDismissRequest,
-            onSelectChoice = { _, choice -> picking = choice.data },
+            onDismissRequest = { closing = true },
+            onSelectChoice = { _, choice ->
+                closing = false
+                picking = choice.data
+            },
             gravity = gravity,
         )
     } else {
