@@ -2,6 +2,7 @@ package com.github.damontecres.wholphin.ui.components
 
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.text.InlineTextContent
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Star
@@ -9,6 +10,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.NonRestartableComposable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -34,7 +36,6 @@ import org.jellyfin.sdk.model.DateTime
 import org.jellyfin.sdk.model.UUID
 import kotlin.time.Duration
 
-@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 fun QuickDetails(
     details: QuickDetailsData?,
@@ -51,15 +52,18 @@ fun QuickDetails(
 ) {
     val enabled = LocalInterfaceCustomization.current.enabledDisplayToggles
     val inlineContentMap = rememberQuickDetailsContentMap(textStyle)
-    // Fork (GooseFlix): the line wraps, each rating moving down whole, instead of running off the
-    // edge when several rating sources are on
-    val line: @Composable (@Composable () -> Unit) -> Unit =
-        if (BuildConfig.GOOSEFLIX) {
-            { content -> androidx.compose.foundation.layout.FlowRow(modifier = modifier) { content() } }
-        } else {
-            { content -> Row(modifier = modifier) { content() } }
-        }
-    line {
+    // Fork (GooseFlix): the headers put this line in a column 60% of the screen wide, which cut off
+    // the last ratings when several sources are on. The line may run past that column to the
+    // screen's full width; the title and overview keep theirs.
+    Row(
+        modifier =
+            // Only where ratings are shown (the headers): list rows have other things beside them
+            if (BuildConfig.GOOSEFLIX && itemId != null) {
+                modifier.wrapContentWidth(Alignment.Start, unbounded = true)
+            } else {
+                modifier
+            },
+    ) {
         if (details != null) {
             QuickDetailsText(details.basic, Modifier, textStyle, inlineContentMap)
             if (DisplayToggle.OFFICIAL_RATING in enabled) {
