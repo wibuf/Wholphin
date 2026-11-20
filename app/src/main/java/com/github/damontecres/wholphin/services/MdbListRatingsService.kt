@@ -122,6 +122,19 @@ class MdbListRatingsService
                         "mal.png"
                     }
 
+                    // GooseFlix #1671; Metacritic's user score has no icon of its own there
+                    MdbListSource.METACRITIC, MdbListSource.METACRITIC_USER -> {
+                        "Metacritic.png"
+                    }
+
+                    MdbListSource.LETTERBOXD -> {
+                        "Letterboxd.png"
+                    }
+
+                    MdbListSource.TRAKT -> {
+                        "Trakt.png"
+                    }
+
                     MdbListSource.TOMATOES -> {
                         if (value >= FRESH_THRESHOLD) {
                             "Rotten_Tomatoes.png"

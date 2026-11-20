@@ -80,4 +80,29 @@ class MdbListFormattingTest {
         val odd = parse("""{"hasCache":true,"ratings":[{"source":"tomatoes","value":68.7}]}""")
         assertEquals("68%", formatRating(MdbListSource.TOMATOES, odd.valueFor(MdbListSource.TOMATOES)!!))
     }
+
+    @Test
+    fun `the other sources are shown in their own scales`() {
+        assertEquals("66", formatRating(MdbListSource.METACRITIC, 66.0))
+        assertEquals("8.2", formatRating(MdbListSource.METACRITIC_USER, 8.2))
+        assertEquals("3.9", formatRating(MdbListSource.LETTERBOXD, 3.9))
+        assertEquals("78%", formatRating(MdbListSource.TRAKT, 78.0))
+    }
+
+    @Test
+    fun `scores convert back to each source's scale when the value is missing`() {
+        val onlyScores =
+            com.github.damontecres.wholphin.data.model.MdbListRatingsResponse(
+                hasCache = true,
+                ratings =
+                    listOf(
+                        com.github.damontecres.wholphin.data.model.MdbListRating("metacriticuser", score = 82.0),
+                        com.github.damontecres.wholphin.data.model.MdbListRating("letterboxd", score = 78.0),
+                        com.github.damontecres.wholphin.data.model.MdbListRating("trakt", score = 78.0),
+                    ),
+            )
+        assertEquals(8.2, onlyScores.valueFor(MdbListSource.METACRITIC_USER)!!, 0.001)
+        assertEquals(3.9, onlyScores.valueFor(MdbListSource.LETTERBOXD)!!, 0.001)
+        assertEquals(78.0, onlyScores.valueFor(MdbListSource.TRAKT)!!, 0.001)
+    }
 }

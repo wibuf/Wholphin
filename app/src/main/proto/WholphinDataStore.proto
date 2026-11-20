@@ -247,6 +247,11 @@ enum DisplayToggle{
   MDBLIST_POPCORN = 502;
   MDBLIST_TMDB = 503;
   MDBLIST_MAL = 504;
+  // GooseFlix #1671: the other sources the GooseFlix plugin keeps
+  MDBLIST_METACRITIC = 505;
+  MDBLIST_METACRITIC_USER = 506;
+  MDBLIST_LETTERBOXD = 507;
+  MDBLIST_TRAKT = 508;
 }
 
 message InterfacePreferences {

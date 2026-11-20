@@ -14,7 +14,16 @@ object GooseFlixDefaults {
     const val MAX_ITEMS_PER_ROW = 50
 
     /** The server's critic and community scores are hidden: the MDBList ratings replace them */
-    val hiddenDisplayToggles = setOf(DisplayToggle.CRITIC_RATING, DisplayToggle.COMMUNITY_RATING)
+    val hiddenDisplayToggles =
+        setOf(
+            DisplayToggle.CRITIC_RATING,
+            DisplayToggle.COMMUNITY_RATING,
+            // GooseFlix #1671: available, off until turned on
+            DisplayToggle.MDBLIST_METACRITIC,
+            DisplayToggle.MDBLIST_METACRITIC_USER,
+            DisplayToggle.MDBLIST_LETTERBOXD,
+            DisplayToggle.MDBLIST_TRAKT,
+        )
 
     fun displayToggles(all: List<DisplayToggle>): List<DisplayToggle> =
         if (BuildConfig.GOOSEFLIX) all.filterNot { it in hiddenDisplayToggles } else all

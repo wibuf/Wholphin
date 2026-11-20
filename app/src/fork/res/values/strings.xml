@@ -10,4 +10,6 @@
     <string name="display_preset_default">GooseFlix Default</string>
     <string name="display_preset_compact">GooseFlix Compact</string>
     <string name="updated_toast">GooseFlix updated to %s</string>
+    <!-- GooseFlix #1671: ratings come from MDBList through the GooseFlix server plugin -->
+    <string name="mdblist_requires_plugin">From MDBList, through the GooseFlix server plugin</string>
 </resources>

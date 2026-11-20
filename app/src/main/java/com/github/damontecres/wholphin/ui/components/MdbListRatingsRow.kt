@@ -32,6 +32,10 @@ private val SOURCE_TOGGLES =
         MdbListSource.MAL to DisplayToggle.MDBLIST_MAL,
         MdbListSource.TOMATOES to DisplayToggle.MDBLIST_TOMATOES,
         MdbListSource.POPCORN to DisplayToggle.MDBLIST_POPCORN,
+        MdbListSource.METACRITIC to DisplayToggle.MDBLIST_METACRITIC,
+        MdbListSource.METACRITIC_USER to DisplayToggle.MDBLIST_METACRITIC_USER,
+        MdbListSource.LETTERBOXD to DisplayToggle.MDBLIST_LETTERBOXD,
+        MdbListSource.TRAKT to DisplayToggle.MDBLIST_TRAKT,
         MdbListSource.TMDB to DisplayToggle.MDBLIST_TMDB,
     )
 
@@ -52,7 +56,13 @@ private const val SEPARATOR = "  \u2022  "
 fun MdbListRatingsResponse.valueFor(source: MdbListSource): Double? {
     val rating = forSource(source) ?: return null
     return rating.value
-        ?: rating.score?.let { if (source == MdbListSource.IMDB || source == MdbListSource.MAL) it / 10.0 else it }
+        ?: rating.score?.let {
+            when (source) {
+                MdbListSource.IMDB, MdbListSource.MAL, MdbListSource.METACRITIC_USER -> it / 10.0
+                MdbListSource.LETTERBOXD -> it / 20.0
+                else -> it
+            }
+        }
 }
 
 /** How a source writes its own numbers: IMDb and TMDB out of ten, Rotten Tomatoes as percentages */
@@ -61,9 +71,11 @@ fun formatRating(
     value: Double,
 ): String =
     when (source) {
-        MdbListSource.IMDB, MdbListSource.MAL -> String.format(Locale.getDefault(), "%.1f", value)
+        MdbListSource.IMDB, MdbListSource.MAL, MdbListSource.METACRITIC_USER, MdbListSource.LETTERBOXD ->
+            String.format(Locale.getDefault(), "%.1f", value)
         MdbListSource.TMDB -> String.format(Locale.getDefault(), "%.1f", value / 10.0)
-        MdbListSource.TOMATOES, MdbListSource.POPCORN -> "${value.toInt()}%"
+        MdbListSource.TOMATOES, MdbListSource.POPCORN, MdbListSource.TRAKT -> "${value.toInt()}%"
+        MdbListSource.METACRITIC -> value.toInt().toString()
     }
 
 /**

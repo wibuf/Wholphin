@@ -56,4 +56,16 @@ enum class MdbListSource(
 
     /** MyAnimeList, out of 10. MDBList only has it for anime. */
     MAL("myanimelist"),
+
+    /** Metacritic critics, out of 100 (GooseFlix #1671) */
+    METACRITIC("metacritic"),
+
+    /** Metacritic users, out of 10 */
+    METACRITIC_USER("metacriticuser"),
+
+    /** Letterboxd, out of 5 */
+    LETTERBOXD("letterboxd"),
+
+    /** Trakt, a percentage */
+    TRAKT("trakt"),
 }
