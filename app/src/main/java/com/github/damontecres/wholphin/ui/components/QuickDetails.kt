@@ -34,6 +34,7 @@ import org.jellyfin.sdk.model.DateTime
 import org.jellyfin.sdk.model.UUID
 import kotlin.time.Duration
 
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 fun QuickDetails(
     details: QuickDetailsData?,
@@ -50,7 +51,15 @@ fun QuickDetails(
 ) {
     val enabled = LocalInterfaceCustomization.current.enabledDisplayToggles
     val inlineContentMap = rememberQuickDetailsContentMap(textStyle)
-    Row(modifier = modifier) {
+    // Fork (GooseFlix): the line wraps, each rating moving down whole, instead of running off the
+    // edge when several rating sources are on
+    val line: @Composable (@Composable () -> Unit) -> Unit =
+        if (BuildConfig.GOOSEFLIX) {
+            { content -> androidx.compose.foundation.layout.FlowRow(modifier = modifier) { content() } }
+        } else {
+            { content -> Row(modifier = modifier) { content() } }
+        }
+    line {
         if (details != null) {
             QuickDetailsText(details.basic, Modifier, textStyle, inlineContentMap)
             if (DisplayToggle.OFFICIAL_RATING in enabled) {
