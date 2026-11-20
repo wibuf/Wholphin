@@ -134,6 +134,7 @@ class PlaybackViewModelTests {
             screensaverService = mockScreensaverService,
             musicService = mockMusicService,
             nextEpisodePreload = mockk(relaxed = true),
+            skipOverridesService = mockk(relaxed = true),
             destination = destination,
         )
 

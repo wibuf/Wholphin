@@ -63,6 +63,9 @@ enum class PlaybackDialogType {
     VIDEO_SCALE,
     SUBTITLE_DELAY,
     BITRATE,
+
+    // Fork (GooseFlix): Settings → Skipping, per-show skip choices
+    SKIPPING,
 }
 
 data class PlaybackSettings(
@@ -166,6 +169,15 @@ fun PlaybackDialog(
                             ),
                         )
                     }
+                    LocalSkipSettings.current?.let { skip ->
+                        add(
+                            BottomDialogItem(
+                                data = PlaybackDialogType.SKIPPING,
+                                headline = "Skipping",
+                                supporting = skip.summary,
+                            ),
+                        )
+                    }
                     add(
                         BottomDialogItem(
                             data = PlaybackDialogType.BITRATE,
@@ -194,6 +206,16 @@ fun PlaybackDialog(
                 },
                 gravity = leftGravity,
             )
+        }
+
+        PlaybackDialogType.SKIPPING -> {
+            LocalSkipSettings.current?.let { skip ->
+                SkipSettingsDialog(
+                    ui = skip,
+                    onDismissRequest = onDismissRequest,
+                    gravity = leftGravity,
+                )
+            } ?: onDismissRequest()
         }
 
         PlaybackDialogType.AUDIO -> {

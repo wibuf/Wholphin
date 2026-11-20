@@ -766,54 +766,76 @@ fun PlaybackPageContent(
         }
     }
 
+    // Fork (GooseFlix): this show's skip choices for Settings → Skipping
+    val skipOverrides by viewModel.skipOverrides.collectAsState()
+    val skipSettings =
+        if (BuildConfig.GOOSEFLIX && state.currentPlayback?.item?.type?.isLiveTvStream != true) {
+            SkipSettingsUi(
+                types =
+                    state.mediaSegments
+                        .map { it.type }
+                        .filter { it in SKIPPABLE_TYPES }
+                        .distinct()
+                        .sortedBy { SKIPPABLE_TYPES.indexOf(it) }
+                        .ifEmpty { SKIPPABLE_TYPES },
+                defaults = remember(preferences) { viewModel.skipDefaults() },
+                overrides = skipOverrides,
+                onChange = viewModel::setSkipOverride,
+            )
+        } else {
+            null
+        }
     playbackDialog?.let { type ->
-        PlaybackDialog(
-            type = type,
-            settings =
-                PlaybackSettings(
-                    showDebugInfo = showDebugInfo,
-                    audioIndex = state.currentPlayback?.audioIndex,
-                    audioStreams = state.currentMediaInfo.audioStreams,
-                    subtitleIndex = state.currentPlayback?.subtitleIndex,
-                    subtitleStreams = state.currentMediaInfo.subtitleStreams,
-                    playbackSpeed = playbackSpeed,
-                    contentScale = contentScale,
-                    subtitleDelay = state.currentPlayback?.subtitleDelay ?: Duration.ZERO,
-                    hasSubtitleDownloadPermission =
-                        remember(userDto) { userDto?.policy?.let { it.isAdministrator || it.enableSubtitleManagement } == true },
-                    // TODO Passing through audio prevents changing playback speed
-                    // See https://github.com/damontecres/Wholphin/issues/164
-                    playbackSpeedEnabled = playerBackend == PlayerBackend.MPV || state.currentPlayback?.audioDecoder != null,
-                    maxBitrate = state.maxBitrate,
-                ),
-            onDismissRequest = {
-                playbackDialog =
-                    when (type) {
-                        // Go back to settings dialog
-                        PlaybackDialogType.PLAYBACK_SPEED,
-                        PlaybackDialogType.VIDEO_SCALE,
-                        -> PlaybackDialogType.SETTINGS
+        CompositionLocalProvider(LocalSkipSettings provides skipSettings) {
+            PlaybackDialog(
+                type = type,
+                settings =
+                    PlaybackSettings(
+                        showDebugInfo = showDebugInfo,
+                        audioIndex = state.currentPlayback?.audioIndex,
+                        audioStreams = state.currentMediaInfo.audioStreams,
+                        subtitleIndex = state.currentPlayback?.subtitleIndex,
+                        subtitleStreams = state.currentMediaInfo.subtitleStreams,
+                        playbackSpeed = playbackSpeed,
+                        contentScale = contentScale,
+                        subtitleDelay = state.currentPlayback?.subtitleDelay ?: Duration.ZERO,
+                        hasSubtitleDownloadPermission =
+                            remember(userDto) { userDto?.policy?.let { it.isAdministrator || it.enableSubtitleManagement } == true },
+                        // TODO Passing through audio prevents changing playback speed
+                        // See https://github.com/damontecres/Wholphin/issues/164
+                        playbackSpeedEnabled = playerBackend == PlayerBackend.MPV || state.currentPlayback?.audioDecoder != null,
+                        maxBitrate = state.maxBitrate,
+                    ),
+                onDismissRequest = {
+                    playbackDialog =
+                        when (type) {
+                            // Go back to settings dialog
+                            PlaybackDialogType.PLAYBACK_SPEED,
+                            PlaybackDialogType.VIDEO_SCALE,
+                            PlaybackDialogType.SKIPPING,
+                            -> PlaybackDialogType.SETTINGS
 
-                        else -> null
+                            else -> null
+                        }
+                    if (controllerViewState.controlsVisible) {
+                        controllerViewState.pulseControls()
                     }
-                if (controllerViewState.controlsVisible) {
-                    controllerViewState.pulseControls()
-                }
-            },
-            onControllerInteraction = {
-                controllerViewState.pulseControls(Long.MAX_VALUE)
-            },
-            onClickPlaybackDialogType = {
-                if (it == PlaybackDialogType.SUBTITLE_DELAY) {
-                    // Hide controls so subtitles are fully visible
-                    controllerViewState.hideControls()
-                }
-                playbackDialog = it
-            },
-            onPlaybackActionClick = onPlaybackActionClick,
-            onChangeSubtitleDelay = { viewModel.updateSubtitleDelay(it) },
-            enableSubtitleDelay = player is MpvPlayer,
-            enableVideoScale = player !is MpvPlayer,
-        )
+                },
+                onControllerInteraction = {
+                    controllerViewState.pulseControls(Long.MAX_VALUE)
+                },
+                onClickPlaybackDialogType = {
+                    if (it == PlaybackDialogType.SUBTITLE_DELAY) {
+                        // Hide controls so subtitles are fully visible
+                        controllerViewState.hideControls()
+                    }
+                    playbackDialog = it
+                },
+                onPlaybackActionClick = onPlaybackActionClick,
+                onChangeSubtitleDelay = { viewModel.updateSubtitleDelay(it) },
+                enableSubtitleDelay = player is MpvPlayer,
+                enableVideoScale = player !is MpvPlayer,
+            )
+        }
     }
 }

@@ -167,6 +167,7 @@ class PlaybackViewModel
         private val screensaverService: ScreensaverService,
         private val musicService: MusicService,
         private val nextEpisodePreload: NextEpisodePreload,
+        private val skipOverridesService: com.github.damontecres.wholphin.services.SkipOverridesService,
         @Assisted private val destination: Destination,
     ) : ViewModel(),
         Player.Listener,
@@ -740,7 +741,10 @@ class PlaybackViewModel
                     player.play()
                 }
                 listenForSegments(item.id)
-                if (BuildConfig.GOOSEFLIX) watchForPreload(item)
+                if (BuildConfig.GOOSEFLIX) {
+                    watchForPreload(item)
+                    loadSkipOverrides(item)
+                }
                 return@withContext true
             }
 
@@ -1378,13 +1382,18 @@ class PlaybackViewModel
                                     }
                                 } else {
                                     val behavior =
-                                        when (currentSegment.type) {
-                                            MediaSegmentType.COMMERCIAL -> prefs.skipCommercials
-                                            MediaSegmentType.PREVIEW -> prefs.skipPreviews
-                                            MediaSegmentType.RECAP -> prefs.skipRecaps
-                                            MediaSegmentType.OUTRO -> prefs.skipOutros
-                                            MediaSegmentType.INTRO -> prefs.skipIntros
-                                            MediaSegmentType.UNKNOWN -> SkipSegmentBehavior.IGNORE
+                                        if (BuildConfig.GOOSEFLIX) {
+                                            // Fork: this show's own choice first (Settings → Skipping)
+                                            effectiveSkip(prefs, currentSegment.type)
+                                        } else {
+                                            when (currentSegment.type) {
+                                                MediaSegmentType.COMMERCIAL -> prefs.skipCommercials
+                                                MediaSegmentType.PREVIEW -> prefs.skipPreviews
+                                                MediaSegmentType.RECAP -> prefs.skipRecaps
+                                                MediaSegmentType.OUTRO -> prefs.skipOutros
+                                                MediaSegmentType.INTRO -> prefs.skipIntros
+                                                MediaSegmentType.UNKNOWN -> SkipSegmentBehavior.IGNORE
+                                            }
                                         }
                                     withContext(WholphinDispatchers.Main) {
                                         val newSegment =
@@ -1456,9 +1465,55 @@ class PlaybackViewModel
             val prefs = preferences.appPreferences.playbackPreferences
             val autoSkipped =
                 state.value.mediaSegments
-                    .filter { it.id != segment.id && segmentBehavior(prefs, it.type) == SkipSegmentBehavior.AUTO_SKIP }
+                    .filter { it.id != segment.id && effectiveSkip(prefs, it.type) == SkipSegmentBehavior.AUTO_SKIP }
                     .map { it.startTicks.ticks.inWholeMilliseconds to it.endTicks.ticks.inWholeMilliseconds }
             return NextEpisodePreload.skipTargetMs(end, player.duration, autoSkipped)
+        }
+
+        // Fork (GooseFlix): this show's own skip choices (player Settings → Skipping), by segment type
+        private var skipKey: String? = null
+        private val _skipOverrides = MutableStateFlow<Map<MediaSegmentType, SkipSegmentBehavior>>(emptyMap())
+        val skipOverrides: StateFlow<Map<MediaSegmentType, SkipSegmentBehavior>> = _skipOverrides
+
+        /** The show's choice for [type], else the global Skip setting */
+        private fun effectiveSkip(
+            prefs: PlaybackPreferences,
+            type: MediaSegmentType,
+        ): SkipSegmentBehavior = _skipOverrides.value[type] ?: segmentBehavior(prefs, type)
+
+        /** The global Skip settings by segment type, for the Skipping menu */
+        fun skipDefaults(): Map<MediaSegmentType, SkipSegmentBehavior> {
+            val prefs = preferences.appPreferences.playbackPreferences
+            return SKIPPABLE_TYPES.associateWith { segmentBehavior(prefs, it) }
+        }
+
+        /** An episode's choices are its show's; a movie's its own */
+        private fun skipKeyFor(item: BaseItem): String = (item.data.seriesId ?: item.id).toString()
+
+        private fun loadSkipOverrides(item: BaseItem) {
+            val key = skipKeyFor(item)
+            if (key == skipKey) return
+            skipKey = key
+            _skipOverrides.value = emptyMap()
+            viewModelScope.launchIO {
+                val overrides = skipOverridesService.load(key)
+                if (skipKey == key) _skipOverrides.value = overrides
+            }
+        }
+
+        /** Sets (or with null clears) this show's choice for a segment type, for the rest of the episode too */
+        fun setSkipOverride(
+            type: MediaSegmentType,
+            behavior: SkipSegmentBehavior?,
+        ) {
+            val key = skipKey ?: return
+            val updated = _skipOverrides.value.toMutableMap().apply { if (behavior == null) remove(type) else put(type, behavior) }
+            _skipOverrides.value = updated
+            // A segment already offered or skipped under the old choice is judged again
+            autoSkippedSegments.clear()
+            viewModelScope.launchIO(ExceptionHandler(autoToast = true)) {
+                skipOverridesService.save(key, updated)
+            }
         }
 
         private fun segmentBehavior(
