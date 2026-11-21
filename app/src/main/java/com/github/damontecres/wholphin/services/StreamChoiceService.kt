@@ -579,18 +579,16 @@ class StreamChoiceService
 
         /**
          * Returns true if a word in the track's title starts with any of the keywords
-         * (case-insensitive), so "eng" finds "English" but not "Bengali". With [ignoreTags],
-         * [bracketed] release-group tags are left out first, so "Full Subtitles [Official+Signs]"
-         * doesn't count as a signs track.
+         * (case-insensitive), so "eng" finds "English" but not "Bengali". Avoided keywords use
+         * [avoids] instead.
          */
         private fun matchesKeyword(
             track: MediaStream,
             keywords: List<String>,
-            ignoreTags: Boolean = false,
         ): Boolean {
             if (keywords.isEmpty()) return false
             val title = track.title ?: track.displayTitle ?: return false
-            return titleMatches(if (ignoreTags) withoutTags(title) else title, keywords)
+            return titleMatches(title, keywords)
         }
 
         /**
@@ -605,7 +603,10 @@ class StreamChoiceService
         ): Int {
             var score = 0
             if (matchesKeyword(track, preferredKeywords)) score++
-            if (matchesKeyword(track, avoidedKeywords, ignoreTags = true)) score--
+            if (avoidedKeywords.isNotEmpty()) {
+                val title = track.title ?: track.displayTitle
+                if (avoids(title, track.isForced, avoidedKeywords)) score--
+            }
             return score
         }
 
@@ -617,7 +618,7 @@ class StreamChoiceService
         ): Int {
             var score = 0
             if (preferredKeywords.isNotEmpty() && titleMatches(title, preferredKeywords)) score++
-            if (avoidedKeywords.isNotEmpty() && titleMatches(withoutTags(title), avoidedKeywords)) score--
+            if (avoidedKeywords.isNotEmpty() && avoids(title, false, avoidedKeywords)) score--
             return score
         }
 
@@ -635,6 +636,28 @@ class StreamChoiceService
                     }
                     false
                 }
+
+            /**
+             * True if a track counts as avoided: a word in its title outside [bracketed] tags
+             * starts with an avoided keyword, or a whole tag is one ("English [Forced]" for
+             * "forced", where "[Official+Signs]" isn't for "signs"), or it's flagged forced and
+             * "forced" is avoided. Without the last two a forced track was never penalised, tied
+             * with the full one and won on its default flag (2026-11-21)
+             */
+            fun avoids(
+                title: String?,
+                isForced: Boolean,
+                avoidedKeywords: List<String>,
+            ): Boolean {
+                if (avoidedKeywords.isEmpty()) return false
+                if (isForced && avoidedKeywords.any { it.equals("forced", ignoreCase = true) }) return true
+                if (title == null) return false
+                if (titleMatches(withoutTags(title), avoidedKeywords)) return true
+                return BRACKET_TAG.findAll(title).any { tag ->
+                    val inside = tag.value.trim('[', ']').trim()
+                    avoidedKeywords.any { it.equals(inside, ignoreCase = true) }
+                }
+            }
 
             /** [title] without its [bracketed] tags, unless that leaves nothing */
             fun withoutTags(title: String): String = title.replace(BRACKET_TAG, " ").takeIf { it.isNotBlank() } ?: title

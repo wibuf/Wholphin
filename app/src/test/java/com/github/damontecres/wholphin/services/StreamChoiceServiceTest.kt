@@ -1214,6 +1214,48 @@ class TestStreamChoiceServiceKeywordEdgeCases(
                         ),
                     preferredKeywords = "full",
                 ),
+                // Owner's screen (2026-11-21): "English [Forced]" is flagged default and forced;
+                // with GooseFlix's keywords the full "English" track must win, not the forced one.
+                // The [Forced] tag counts for the avoided "forced" (a tag that is exactly one
+                // avoided word), unlike group tags such as "[Official+Signs]"
+                TestInput(
+                    expectedIndex = 0,
+                    userSubtitleMode = SubtitlePlaybackMode.DEFAULT,
+                    subtitles =
+                        listOf(
+                            subtitle(0, "eng", title = "English"),
+                            subtitle(1, "eng", default = true, forced = true, title = "English [Forced]"),
+                            subtitle(2, "eng", sdh = true, title = "English [SDH]"),
+                            subtitle(3, "ara", title = "العربية"),
+                            subtitle(4, "por", title = "Português"),
+                        ),
+                    preferredKeywords = "full, dialogue, eng",
+                    avoidedKeywords = "signs, songs, forced, foreign, dub, commentary, ext",
+                ),
+                TestInput(
+                    expectedIndex = 0,
+                    userSubtitleMode = SubtitlePlaybackMode.ALWAYS,
+                    subtitles =
+                        listOf(
+                            subtitle(0, "eng", title = "English"),
+                            subtitle(1, "eng", default = true, forced = true, title = "English [Forced]"),
+                            subtitle(2, "eng", sdh = true, title = "English [SDH]"),
+                        ),
+                    preferredKeywords = "full, dialogue, eng",
+                    avoidedKeywords = "signs, songs, forced, foreign, dub, commentary, ext",
+                ),
+                // Flagged forced with a plain title: the flag counts for the avoided "forced"
+                TestInput(
+                    expectedIndex = 1,
+                    userSubtitleMode = SubtitlePlaybackMode.DEFAULT,
+                    subtitles =
+                        listOf(
+                            subtitle(0, "eng", default = true, forced = true, title = "English"),
+                            subtitle(1, "eng", title = "English"),
+                        ),
+                    preferredKeywords = "full, dialogue, eng",
+                    avoidedKeywords = "signs, songs, forced, foreign, dub, commentary, ext",
+                ),
                 // Avoided keyword must NOT exclude: the only track still plays
                 TestInput(
                     expectedIndex = 0,
@@ -1562,5 +1604,19 @@ class KeywordMatchingTest {
         Assert.assertEquals("Full Subtitles  ", StreamChoiceService.withoutTags("Full Subtitles [Official+Signs/Songs]"))
         Assert.assertEquals("[Signs]", StreamChoiceService.withoutTags("[Signs]"))
         Assert.assertEquals("Forced (Signs only)", StreamChoiceService.withoutTags("Forced (Signs only)"))
+    }
+
+    @Test
+    fun `a tag that is one avoided word counts, a group tag doesn't`() {
+        val avoided = listOf("signs", "songs", "forced", "foreign", "dub", "commentary", "ext")
+        Assert.assertTrue(StreamChoiceService.avoids("English [Forced]", false, avoided))
+        Assert.assertTrue(StreamChoiceService.avoids("English [ forced ]", false, avoided))
+        Assert.assertTrue(StreamChoiceService.avoids("English", true, avoided))
+        Assert.assertTrue(StreamChoiceService.avoids(null, true, avoided))
+        Assert.assertTrue(StreamChoiceService.avoids("Signs & Songs", false, avoided))
+        Assert.assertFalse(StreamChoiceService.avoids("Full Subtitles [Official+Signs/Songs]", false, avoided))
+        Assert.assertFalse(StreamChoiceService.avoids("English [SDH]", false, avoided))
+        Assert.assertFalse(StreamChoiceService.avoids("English", false, avoided))
+        Assert.assertFalse(StreamChoiceService.avoids("English", true, listOf("signs")))
     }
 }
