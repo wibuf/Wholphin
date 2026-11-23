@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
@@ -14,6 +15,7 @@ import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
 import androidx.tv.material3.DrawerValue
 import androidx.tv.material3.rememberDrawerState
+import com.github.damontecres.wholphin.BuildConfig
 import com.github.damontecres.wholphin.data.model.JellyfinServer
 import com.github.damontecres.wholphin.data.model.JellyfinUser
 import com.github.damontecres.wholphin.preferences.UserPreferences
@@ -55,6 +57,16 @@ fun ApplicationContent(
     viewModel: ApplicationContentViewModel = hiltViewModel(),
 ) {
     val drawerState = rememberDrawerState(DrawerValue.Closed)
+    if (BuildConfig.GOOSEFLIX) {
+        // Fork: Back held on any page goes Home, menu closed, and reloads it (HoldBackToHome)
+        LaunchedEffect(navigationManager) {
+            HoldBackToHome.requests.collect {
+                drawerState.setValue(DrawerValue.Closed)
+                viewModel.clearBackdrop()
+                navigationManager.reloadHome()
+            }
+        }
+    }
     Box(
         modifier = modifier,
     ) {

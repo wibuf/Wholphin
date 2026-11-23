@@ -69,6 +69,7 @@ import com.github.damontecres.wholphin.ui.collectLatestIn
 import com.github.damontecres.wholphin.ui.components.LoadingPage
 import com.github.damontecres.wholphin.ui.launchDefault
 import com.github.damontecres.wholphin.ui.nav.Destination
+import com.github.damontecres.wholphin.ui.nav.HoldBackToHome
 import com.github.damontecres.wholphin.ui.playback.PlayExternalViewModel
 import com.github.damontecres.wholphin.ui.showToast
 import com.github.damontecres.wholphin.ui.theme.WholphinTheme
@@ -320,6 +321,8 @@ class MainActivity : AppCompatActivity() {
         } else {
             screensaverService.pulse()
             if (dispatchGameKeyEvent(event)) return true
+            // Fork: hold Back to go Home and reload it
+            if (BuildConfig.GOOSEFLIX && HoldBackToHome.onKey(event, navigationManager.backStack.lastOrNull())) return true
             return super.dispatchKeyEvent(event)
         }
     }

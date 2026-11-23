@@ -64,6 +64,7 @@ import androidx.tv.material3.ButtonDefaults
 import androidx.tv.material3.LocalContentColor
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import com.github.damontecres.wholphin.BuildConfig
 import com.github.damontecres.wholphin.R
 import com.github.damontecres.wholphin.ui.AppColors
 import com.github.damontecres.wholphin.ui.FontAwesome
@@ -252,7 +253,8 @@ fun <T : CardGridItem> CardGrid(
                     .fillMaxSize()
                     .onKeyEvent {
                         if (DEBUG) Timber.d("onKeyEvent: ${it.nativeKeyEvent}")
-                        if (useBackToJump && it.key == Key.Back && it.nativeKeyEvent.isLongPress) {
+                        // Fork: holding Back goes Home instead (HoldBackToHome)
+                        if (!BuildConfig.GOOSEFLIX && useBackToJump && it.key == Key.Back && it.nativeKeyEvent.isLongPress) {
                             longPressing = true
                             val newPosition = previouslyFocusedIndex
                             if (DEBUG) Timber.d("Back long pressed: newPosition=$newPosition")
